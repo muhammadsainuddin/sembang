@@ -51,7 +51,7 @@ npm run android:build
 Pilihan untuk menetapkan domain lalai ketika binaan (tetapan dalam aplikasi masih boleh diubah):
 
 ```sh
-SEMBANG_SERVER_URL=https://chat.domain-kamu npm run android:build
+SEMBANG_SERVER_URL=https://private.aigeo.my npm run android:build
 ```
 
 **Simpan folder `android/.signing/` secara peribadi dan sandarkannya.** Kunci tandatangan serta kata laluannya dijana secara tempatan pada binaan pertama dan diabaikan oleh Git. Ia diperlukan untuk mengemas kini APK yang sudah dipasang. Jangan masukkan folder ini dalam pakej pelayan atau kongsi secara terbuka. Fail `.apk.sha256` menyemak integriti fail; APK juga mempunyai tandatangan Android.

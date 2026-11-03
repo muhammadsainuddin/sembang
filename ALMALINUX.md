@@ -4,6 +4,14 @@ Pakej ini menjalankan Node.js 24 + SQLite dalam satu container, dengan storan ke
 
 Pemasangan sebenar VPS masih perlu disahkan mengikut versi OS, port sedia ada, domain dan SMTP. Panduan ini tidak bermaksud sambungan SSH atau deployment ke VPS telah berjaya.
 
+## Domain Sembang
+
+Domain pilihan ialah **https://private.aigeo.my**. `.env.example` sudah menetapkan `SEMBANG_DOMAIN=private.aigeo.my`; Compose menggunakan nilai yang sama untuk HTTPS, Origin API/WebSocket dan kuki selamat.
+
+Dalam Cloudflare DNS untuk `aigeo.my`, tambah rekod **A**, nama **private**, menuju IP VPS yang telah disahkan. Jika VPS masih `38.47.189.17`, gunakan IP itu. Mulakan dengan **DNS only** untuk pengesahan HTTPS terus ke VPS. Jangan tambah rekod AAAA jika IPv6 VPS belum disahkan. Pastikan port 80/443 dibenarkan dan semak servis sedia ada sebelum memilih mod 3A atau 3B di bawah.
+
+Selepas deploy, uji `https://private.aigeo.my/api/health` dan `/api/ready`, kemudian tetapkan alamat server dalam aplikasi Android kepada `https://private.aigeo.my`. Domain ini belum dianggap aktif sehingga DNS, sijil HTTPS dan backend sebenar lulus semakan.
+
 ## Sebelum bermula
 
 - Satu domain/subdomain yang DNS A/AAAA-nya menunjuk kepada VPS. Buang rekod AAAA yang tidak menuju VPS sebenar.
@@ -54,7 +62,7 @@ openssl rand -hex 32
 Salin nilai rawak terakhir ke `AUTH_SECRET` dalam `.env`; jangan kongsi nilai itu. Isi:
 
 ```dotenv
-SEMBANG_DOMAIN=chat.domain-kamu.com
+SEMBANG_DOMAIN=private.aigeo.my
 AUTH_SECRET=nilai_rawak_64_aksara_hex
 SMTP_HOST=smtp.provider-kamu.com
 SMTP_PORT=587
@@ -77,8 +85,8 @@ cd /opt/sembang
 bash deploy/install-almalinux.sh
 docker compose ps
 docker compose logs --tail 50 sembang
-curl --fail https://chat.domain-kamu.com/api/health
-curl --fail https://chat.domain-kamu.com/api/ready
+curl --fail https://private.aigeo.my/api/health
+curl --fail https://private.aigeo.my/api/ready
 ```
 
 Caddy mengurus sijil HTTPS dan WebSocket. Port Node 3000 tidak diterbitkan ke Internet. Compose hanya mempercayai IP tetap container Caddy untuk header IP pengguna. Jika subnet `172.29.241.0/24` bertindih dengan rangkaian VPS, ubah `SEMBANG_SUBNET` dan `CADDY_IP` secara bersama sebelum memulakan stack.
