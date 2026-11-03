@@ -1,0 +1,12 @@
+{$SEMBANG_DOMAIN} {
+    encode zstd gzip
+    request_body {
+        max_size 3MB
+    }
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy sembang:3000 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+}

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Sembang backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 Asia/Kuala_Lumpur
+RandomizedDelaySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

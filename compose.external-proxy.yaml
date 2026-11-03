@@ -1,0 +1,41 @@
+# Standalone alternative: use INSTEAD OF compose.yaml behind an existing host proxy.
+name: sembang
+services:
+  sembang:
+    build: .
+    image: sembang-node:1.4.0
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    stop_grace_period: 25s
+    tmpfs: ['/tmp:size=64m,noexec,nosuid']
+    env_file: ${SEMBANG_ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /app/data
+      COOKIE_SECURE: 'true'
+      EMAIL_VERIFICATION_REQUIRED: 'true'
+      APP_ORIGIN: https://${SEMBANG_DOMAIN:?Set SEMBANG_DOMAIN in .env}
+      TRUST_PROXY: ${PROXY_GATEWAY:-172.29.241.1}/32
+    ports: ['127.0.0.1:3000:3000']
+    volumes: [sembang_data:/app/data]
+    networks: [sembang_net]
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+volumes:
+  sembang_data:
+    name: ${SEMBANG_DATA_VOLUME:-sembang_data}
+networks:
+  sembang_net:
+    ipam:
+      config:
+        - subnet: ${SEMBANG_SUBNET:-172.29.241.0/24}
+          gateway: ${PROXY_GATEWAY:-172.29.241.1}

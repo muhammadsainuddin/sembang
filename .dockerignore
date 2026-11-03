@@ -1,0 +1,13 @@
+node_modules
+.git
+.env
+data
+android
+releases
+.qa
+preview.jpg
+preview-purple.jpg
+test
+
+security
+preview*.jpg

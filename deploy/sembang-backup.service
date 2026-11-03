@@ -1,0 +1,14 @@
+[Unit]
+Description=Sembang consistent SQLite and encrypted media backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/sembang
+ExecStart=/usr/bin/bash /opt/sembang/deploy/backup.sh
+Environment=BACKUP_DIR=/var/backups/sembang
+Environment=BACKUP_RETENTION_DAYS=14
+UMask=0077
+Nice=10
+TimeoutStartSec=2h

@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-28",
+  "serverVersion": "1.2.2",
+  "isolation": "Temporary databases; loopback only; no user data accessed",
+  "probes": {
+    "sharedProxyAuthLimit": {
+      "failedAttempts": 30,
+      "otherForwardedClientStatus": 429,
+      "confirmed": true,
+      "note": "Simulates two clients sharing the reverse proxy TCP peer. Not a load test of a deployed proxy."
+    },
+    "expiredSocketStillReceives": {
+      "restStatusAfterExpiry": 401,
+      "socketConnected": true,
+      "newCiphertextReceivedAndDecrypted": true,
+      "confirmed": true
+    },
+    "orphanMediaRetention": {
+      "unusedUploadsAcceptedAndRetained": 2,
+      "uploadedBytes": 34,
+      "configuredLimitPerAccountPerMinute": 30,
+      "perFileByteLimit": 2097168,
+      "lifetimeQuotaOrExpiry": false,
+      "confirmedBy": "Two uploads plus server code review; no disk exhaustion attempted"
+    }
+  }
+}
