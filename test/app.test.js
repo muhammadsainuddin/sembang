@@ -69,11 +69,12 @@ test('Zbuddy E2EE: authentication, encrypted storage, files, location, calls and
   await t.test('Android can discover the Node server without authentication', async () => {
     const response = await req('/api/health');
     assert.equal(response.status, 200);
-    assert.deepEqual(response.data, { service: 'sembang', version: '1.11.0', status: 'ok' });
+    assert.deepEqual(response.data, { service: 'sembang', version: '1.14.1', status: 'ok' });
     assert.equal(response.cookie, undefined);
   });
   await t.test('auth, origin and conversation authorization', async () => {
     assert.equal((await req('/api/users')).status, 401);
+    assert.equal((await req('/api/statuses', { cookie: alice.cookie })).status, 404);
     assert.equal((await req('/api/login', { body: { username: alice.username, password: 'wrong' } })).status, 401);
     assert.equal((await req('/api/conversations', { cookie: alice.cookie, body: { userId: bob.id }, headers: { Origin: 'https://attacker.example' } })).status, 403);
     const c = await req('/api/conversations', { cookie: alice.cookie, body: { userId: bob.id } }); conversationId = c.data.id;
@@ -179,6 +180,20 @@ test('Zbuddy E2EE: authentication, encrypted storage, files, location, calls and
     assert.equal(pushed.length, 1); assert.equal(nativePushed.length, 2);
     assert.equal((await req('/api/push/devices', { cookie: bob.cookie, method: 'DELETE', body: { token: `fcm:${'A'.repeat(80)}` } })).status, 200);
   });
+  await t.test('reply metadata stays encrypted and messages can be deleted for me or everyone', async () => {
+    const first = await send(a, alice, { kind: 'text', text: 'Original private message' }, 'delete-me-1');
+    const reply = await send(b, bob, { kind: 'text', text: 'Private reply', reply: { id: first.message.id, senderId: alice.id, text: 'Original private message' } }, 'reply-1');
+    assert.equal(JSON.stringify(instance.db.prepare('SELECT body FROM messages WHERE id=?').get(reply.message.id)).includes('Original private message'), false);
+    assert.equal((await plain(alice, reply.message)).reply.id, first.message.id);
+    assert.equal((await req(`/api/messages/${first.message.id}`, { cookie: bob.cookie, method: 'DELETE', body: { mode: 'me' } })).status, 200);
+    const hiddenForBob = (await req(`/api/conversations/${conversationId}/messages`, { cookie: bob.cookie })).data.messages;
+    const visibleForAlice = (await req(`/api/conversations/${conversationId}/messages`, { cookie: alice.cookie })).data.messages;
+    assert.equal(hiddenForBob.some(message => message.id === first.message.id), false); assert.equal(visibleForAlice.some(message => message.id === first.message.id), true);
+    assert.equal((await req(`/api/messages/${reply.message.id}`, { cookie: alice.cookie, method: 'DELETE', body: { mode: 'everyone' } })).status, 403);
+    assert.equal((await req(`/api/messages/${reply.message.id}`, { cookie: bob.cookie, method: 'DELETE', body: { mode: 'everyone' } })).status, 200);
+    const deleted = (await req(`/api/conversations/${conversationId}/messages`, { cookie: alice.cookie })).data.messages.find(message => message.id === reply.message.id);
+    assert.equal(deleted.kind, 'deleted'); assert.deepEqual(deleted.body, {}); assert.ok(deleted.deletedAt);
+  });
   await t.test('encrypted images: bytes and captions are unreadable to server', async () => {
     const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=', 'base64');
     const encrypted = await encryptAttachment(new Blob([bytes], { type: 'image/png' }), `Sembang/v1/image|${conversationId}|image-1`);
@@ -243,7 +258,7 @@ test('Zbuddy E2EE: authentication, encrypted storage, files, location, calls and
   await t.test('pagination and logout', async () => {
     for (let i = 0; i < 60; i++) assert.equal((await send(a, alice, { kind: 'text', text: `History ${i}` }, `history-${i}`)).ok, true);
     let before, all = []; do { const r = await req(`/api/conversations/${conversationId}/messages${before ? `?before=${before}` : ''}`, { cookie: alice.cookie }); all.push(...r.data.messages); before = r.data.next; } while (before);
-    assert.equal(new Set(all.map(m => m.id)).size, 64);
+    assert.equal(new Set(all.map(m => m.id)).size, 66);
     const disconnected = once(x, 'disconnect'); await req('/api/logout', { cookie: outsider.cookie, body: {} }); await disconnected; assert.equal((await req('/api/me', { cookie: outsider.cookie })).status, 401);
   });
   await t.test('ciphertext, keys and attachments survive restart', async () => {

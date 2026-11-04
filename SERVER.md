@@ -1,10 +1,10 @@
-# Pelayan Node.js Zbuddy 1.11.0
+# Pelayan Node.js Zbuddy 1.14.1
 
 Pelayan untuk APK Zbuddy dan pelayar: chat E2EE bagi ahli yang diluluskan Owner, gambar dimampatkan/disulitkan, profil rakan, SQLite, lokasi MapLibre dan isyarat panggilan. **Panduan VPS AlmaLinux:** [ALMALINUX.md](ALMALINUX.md).
 
 ## Ringkasan pemasangan VPS
 
-Pakej `zbuddy-nodejs-server-v1.11.0.zip` mengandungi aplikasi, Dockerfile, dua mod Compose, installer AlmaLinux, backup dan panduan. Data pengguna, `.env` sebenar, kunci SSH dan kunci tandatangan APK tidak disertakan.
+Pakej `zbuddy-nodejs-server-v1.14.1.zip` mengandungi aplikasi, Dockerfile, dua mod Compose, installer AlmaLinux, backup dan panduan. Data pengguna, `.env` sebenar, kunci SSH dan kunci tandatangan APK tidak disertakan.
 
 1. Halakan domain ke VPS dan sediakan SMTP untuk kod emel.
 2. Pasang Docker Engine + Compose mengikut versi AlmaLinux, kemudian ekstrak pakej ke `/opt/sembang`.
@@ -14,7 +14,7 @@ Pakej `zbuddy-nodejs-server-v1.11.0.zip` mengandungi aplikasi, Dockerfile, dua m
 
 Production menolak konfigurasi tanpa HTTPS origin, Secure cookie, pengesahan emel dan SMTP/rahsia yang diperlukan. Header IP hanya dipercayai daripada alamat proxy yang ditetapkan. Jangan buka port 3000 pada semua interface atau menukar TRUST_PROXY kepada true.
 
-## Pengukuhan 1.11.0
+## Pengukuhan 1.14.1
 
 - Rate limit IP asal (termasuk pengelompokan IPv6), disimpan di SQLite supaya kekal selepas restart. IP pengguna berlainan di belakang Caddy tidak berkongsi satu bucket proxy.
 - Akaun pertama menjadi Owner. Pendaftaran production memerlukan kod emel dan kelulusan Owner; akaun sedia ada kekal aktif semasa migrasi. Owner mengurus kelulusan daripada menu profil sendiri.
@@ -44,13 +44,13 @@ Buka `http://localhost:3000`. Untuk APK pada telefon USB:
 adb reverse tcp:3000 tcp:3000
 ```
 
-Pasang APK 1.11.0 dan pilih **Test over USB**. Untuk kegunaan tanpa USB, masukkan origin HTTPS domain yang sama dalam APK. Kod JavaScript baharu datang daripada pelayan; tidak perlu membina APK semula untuk perubahan web berikutnya.
+Pasang APK 1.14.1 untuk mendapatkan peta live location bersama, App Lock, kamera/galeri native, simpan imej, serta foreground call/location. Untuk kegunaan tanpa USB, gunakan origin HTTPS domain yang sama. Kod JavaScript baharu datang daripada pelayan.
 
 `.env` tidak dibaca oleh `npm start` secara automatik di luar Compose. Gunakan `node --env-file=.env server.js` selepas mengisi tetapan yang sesuai untuk cara pemasangan itu.
 
 ## Operasi
 
-`GET /api/health`: `{ "service": "sembang", "version": "1.11.0", "status": "ok" }`. ID service kekal untuk keserasian APK lama.
+`GET /api/health`: `{ "service": "sembang", "version": "1.14.1", "status": "ok" }`. ID service kekal untuk keserasian APK lama.
 
 `GET /api/ready`: 200 apabila SQLite boleh dibaca dan ruang minimum tersedia; 503 jika tidak. Health hanya menyatakan proses hidup; readiness tidak mengesahkan penghantaran SMTP atau sijil awam.
 

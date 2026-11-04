@@ -52,7 +52,7 @@ export async function createBackup(dataDir, backupDir, { retentionDays = 14 } = 
     const vapidSource = path.join(dataDir, 'push-vapid.json');
     copyFileSync(vapidSource, path.join(staging, 'push-vapid.json'));
     chmodSync(path.join(staging, 'push-vapid.json'), 0o600);
-    writeFileSync(path.join(staging, 'backup.json'), JSON.stringify({ format: 1, createdAt: new Date().toISOString(), mediaFiles: files.length, avatarFiles: avatarFiles.length, serverVersion: '1.11.0' })+'\n', { mode: 0o600 });
+    writeFileSync(path.join(staging, 'backup.json'), JSON.stringify({ format: 1, createdAt: new Date().toISOString(), mediaFiles: files.length, avatarFiles: avatarFiles.length, serverVersion: '1.14.1' })+'\n', { mode: 0o600 });
     const result = spawnSync('tar', ['-h', '-czf', partial, '-C', staging, '.'], { stdio: ['ignore', 'pipe', 'pipe'] });
     if (result.status !== 0) throw new Error('Arkib backup gagal; semak ruang backup dan ketersediaan fail.');
     chmodSync(partial, 0o600); renameSync(partial, target);

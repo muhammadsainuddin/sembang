@@ -10,14 +10,27 @@ const initials = name => name.trim().split(/\s+/).filter(x => /^[\p{L}\p{N}]/u.t
 const time = at => new Date(at).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', hour12: false });
 const day = at => new Date(at).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
 const today = at => new Date(at).toDateString() === new Date().toDateString();
-const state = { me: null, socket: null, conversations: [], active: null, messages: [], places: [], placeDraft: null, cursor: null, filter: 'all', attachment: null, sending: false, watches: new Map(), call: null, pushEnabled: false, config: { iceServers: [], mapStyleUrl: '', vapidPublicKey: '', nativePushConfigured: false } };
+const state = { me: null, socket: null, conversations: [], active: null, messages: [], places: [], placeDraft: null, cursor: null, filter: 'all', attachment: null, reply: null, actionMessage: null, sending: false, watches: new Map(), call: null, pushEnabled: false, config: { iceServers: [], mapStyleUrl: '', vapidPublicKey: '', nativePushConfigured: false } };
 const peers = new Map(), imageCache = new Map(), stoppedEnvelopes = new Map(), locationMaps = new Map(), placeMaps = new Map();
 let incomingQueue = Promise.resolve();
 const enqueue = fn => { incomingQueue = incomingQueue.then(fn).catch(e => { if (state.me) toast(e.message); }); };
 let emailVerificationRequest = null, pendingVaultPassword = null, passwordResetRequest = null, registrationOpen = true;
 let authMode = 'register', toastTimer, typingTimer, typingSent = 0, peopleTimer, peopleRequest = 0, conversationRequest = 0, refreshVersion = 0;
+let bottomPinUntil = 0;
 
-const appearanceDefaults = { theme: 'system', background: 'flowers', font: 'system', textSize: 13, bold: false, italic: false };
+const appearanceDefaults = { theme: 'system', palette: 'purple', background: 'flowers', font: 'system', textSize: 13, bold: false, italic: false, accent: '#8e68ac', mine: '#e8d6f4', peer: '#fffafc' };
+const appearancePalettes = {
+  purple: { accent:'#8e68ac', deep:'#5d3c73', lime:'#eadcf4', mine:'#ead8f4', peer:'#fffafd', bg:'#faf7fc', panel:'#ffffff', soft:'#f4edf8', text:'#4b3b55', muted:'#8d8195', line:'#ebe1f0' },
+  blue: { accent:'#668fb5', deep:'#426987', lime:'#dcecf8', mine:'#dcecf8', peer:'#fbfdff', bg:'#f5f9fc', panel:'#ffffff', soft:'#eaf2f8', text:'#344b5d', muted:'#718697', line:'#dce8f0' },
+  green: { accent:'#6f9d82', deep:'#47745b', lime:'#dff0e5', mine:'#dceee3', peer:'#fbfefc', bg:'#f5faf7', panel:'#ffffff', soft:'#eaf4ed', text:'#355044', muted:'#748b80', line:'#dce9e1' },
+  grey: { accent:'#7f8994', deep:'#59636d', lime:'#e7eaed', mine:'#e7eaed', peer:'#ffffff', bg:'#f6f7f8', panel:'#ffffff', soft:'#eceff1', text:'#3f464d', muted:'#7d858c', line:'#e0e3e6' }
+};
+let wallpaperObjectUrl = '';
+function appearanceStore() { return new Promise((resolve, reject) => { const request = indexedDB.open('zbuddy-preferences', 1); request.onupgradeneeded = () => request.result.createObjectStore('assets'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
+async function wallpaperAsset(value) { const db = await appearanceStore(); return new Promise((resolve, reject) => { const tx = db.transaction('assets', value === undefined ? 'readonly' : 'readwrite'), store = tx.objectStore('assets'), request = value === undefined ? store.get('wallpaper') : value === null ? store.delete('wallpaper') : store.put(value, 'wallpaper'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); tx.oncomplete = () => db.close(); }); }
+async function refreshWallpaper() { if (wallpaperObjectUrl) URL.revokeObjectURL(wallpaperObjectUrl), wallpaperObjectUrl = ''; try { const blob = await wallpaperAsset(); if (blob) { wallpaperObjectUrl = URL.createObjectURL(blob); document.documentElement.style.setProperty('--custom-wallpaper', `url("${wallpaperObjectUrl}")`); } else document.documentElement.style.removeProperty('--custom-wallpaper'); } catch {} }
+const soundDefaults = { ringtone: 'classic' };
+let soundContext = null, soundLoop = null, soundPreviewTimer = null;
 function appearanceSettings() {
   try { return { ...appearanceDefaults, ...JSON.parse(localStorage.getItem('zbuddy-appearance') || '{}') }; }
   catch { return { ...appearanceDefaults }; }
@@ -25,15 +38,62 @@ function appearanceSettings() {
 function applyAppearance(settings = appearanceSettings()) {
   const dark = settings.theme === 'dark' || (settings.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.classList.toggle('dark', dark);
-  document.documentElement.dataset.chatBackground = ['flowers','plain','dots','dream'].includes(settings.background) ? settings.background : 'flowers';
+  document.documentElement.dataset.chatBackground = ['flowers','plain','dots','dream','custom'].includes(settings.background) ? settings.background : 'flowers';
   document.documentElement.dataset.chatFont = ['system','rounded','serif','mono'].includes(settings.font) ? settings.font : 'system';
   const legacySize = { small: 11, normal: 13, large: 17 }[settings.size];
   document.documentElement.style.setProperty('--chat-text-size', `${Math.min(24, Math.max(11, Number(settings.textSize || legacySize || 13)))}px`);
   document.documentElement.dataset.chatBold = settings.bold ? 'true' : 'false';
   document.documentElement.dataset.chatItalic = settings.italic ? 'true' : 'false';
+  const validColour = value => /^#[0-9a-f]{6}$/i.test(value || ''), preset = appearancePalettes[settings.palette] || appearancePalettes.purple;
+  const colours = settings.palette === 'custom' ? { ...preset, accent: validColour(settings.accent) ? settings.accent : preset.accent, mine: validColour(settings.mine) ? settings.mine : preset.mine, peer: validColour(settings.peer) ? settings.peer : preset.peer } : preset;
+  for (const [name, value] of Object.entries({ green:colours.accent,'green-deep':colours.deep,lime:colours.lime,bubble:colours.mine,'peer-bubble':colours.peer,bg:colours.bg,panel:colours.panel,soft:colours.soft,text:colours.text,muted:colours.muted,line:colours.line })) document.documentElement.style.setProperty(`--${name}`, value);
+  if (settings.background === 'custom') refreshWallpaper();
 }
 applyAppearance();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (appearanceSettings().theme === 'system') applyAppearance(); });
+
+function soundSettings() {
+  try { return { ...soundDefaults, ...JSON.parse(localStorage.getItem('zbuddy-sounds') || '{}') }; }
+  catch { return { ...soundDefaults }; }
+}
+function audioEngine() {
+  const AudioEngine = window.AudioContext || window.webkitAudioContext;
+  if (!AudioEngine) return null;
+  soundContext ||= new AudioEngine();
+  if (soundContext.state === 'suspended') soundContext.resume().catch(() => {});
+  return soundContext;
+}
+function playTonePattern(name) {
+  const context = audioEngine(); if (!context || name === 'silent') return;
+  const patterns = {
+    classic: [[0, 440, .24], [.34, 540, .24], [.68, 440, .24]],
+    gentle: [[0, 523, .32], [.38, 659, .36]],
+    pulse: [[0, 720, .13], [.22, 720, .13], [.58, 620, .18]],
+    ringback: [[0, 425, .38], [.48, 425, .38]],
+  };
+  const now = context.currentTime + .02;
+  for (const [offset, frequency, duration] of patterns[name] || patterns.classic) {
+    const oscillator = context.createOscillator(), gain = context.createGain();
+    oscillator.type = name === 'gentle' ? 'sine' : 'triangle'; oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(.0001, now + offset); gain.gain.exponentialRampToValueAtTime(.045, now + offset + .02); gain.gain.exponentialRampToValueAtTime(.0001, now + offset + duration);
+    oscillator.connect(gain).connect(context.destination); oscillator.start(now + offset); oscillator.stop(now + offset + duration + .03);
+  }
+}
+function stopCallSound() {
+  clearInterval(soundLoop); soundLoop = null;
+  try { window.ZbuddyAndroid?.stopRingtone?.(); } catch {}
+}
+function startWebCallSound(name) {
+  stopCallSound(); if (name === 'silent') return;
+  playTonePattern(name); soundLoop = setInterval(() => playTonePattern(name), name === 'ringback' ? 3200 : 2500);
+}
+function startIncomingRingtone() {
+  stopCallSound();
+  try { if (window.ZbuddyAndroid?.startRingtone) { window.ZbuddyAndroid.startRingtone(); return; } } catch {}
+  startWebCallSound(soundSettings().ringtone);
+}
+function startOutgoingRingback() { startWebCallSound('ringback'); }
+document.addEventListener('pointerdown', () => audioEngine(), { once: true, passive: true });
 
 function toast(message) {
   $('toast').textContent = message;
@@ -129,50 +189,97 @@ function avatar(el, user) {
   if (user.avatar) { const img = document.createElement('img'); img.src = user.avatar; img.alt = ''; el.append(img); }
   else el.textContent = initials(user.name);
 }
-function destroyLocationMaps() { for (const entry of locationMaps.values()) entry.map.remove(); locationMaps.clear(); }
-function destroyPlaceMaps() { for (const map of placeMaps.values()) map.remove(); placeMaps.clear(); }
+let locationMapObserver, placeMapObserver, combinedLocationEntry = null;
+function destroyCombinedLocationMap() { if (combinedLocationEntry) combinedLocationEntry.map.remove(); combinedLocationEntry = null; $('combinedLiveMap')?.replaceChildren(); }
+function destroyLocationMaps() { locationMapObserver?.disconnect(); locationMapObserver = null; for (const entry of locationMaps.values()) entry.map.remove(); locationMaps.clear(); }
+function destroyPlaceMaps() { placeMapObserver?.disconnect(); placeMapObserver = null; for (const map of placeMaps.values()) map.remove(); placeMaps.clear(); }
+function createPlaceMap(container) {
+  const place = state.places.find(item => item.id === container.dataset.placeMap); if (!place?.secure || placeMaps.has(place.id) || !container.isConnected) return;
+  try { const center = [place.body.longitude, place.body.latitude], map = new maplibregl.Map({ container, style: state.config.mapStyleUrl, center, zoom: 13.5, attributionControl: false, interactive: true }); map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right'); map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left'); new maplibregl.Marker({ color: '#8d67af' }).setLngLat(center).addTo(map); placeMaps.set(place.id, map); }
+  catch { container.textContent = 'The map could not be loaded'; }
+}
 function mountPlaceMaps() {
   if (!state.config.mapStyleUrl) return;
+  placeMapObserver ||= 'IntersectionObserver' in window ? new IntersectionObserver(entries => { for (const entry of entries) if (entry.isIntersecting) { placeMapObserver.unobserve(entry.target); createPlaceMap(entry.target); } }, { root: $('placesList'), rootMargin: '300px' }) : null;
   document.querySelectorAll('[data-place-map]').forEach(container => {
-    const place = state.places.find(item => item.id === container.dataset.placeMap);
-    if (!place?.secure || placeMaps.has(place.id)) return;
-    try {
-      const center = [place.body.longitude, place.body.latitude];
-      const map = new maplibregl.Map({ container, style: state.config.mapStyleUrl, center, zoom: 13.5, attributionControl: false, interactive: true });
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-      new maplibregl.Marker({ color: '#8d67af' }).setLngLat(center).addTo(map); placeMaps.set(place.id, map);
-    } catch { container.textContent = 'The map could not be loaded'; }
+    const place = state.places.find(item => item.id === container.dataset.placeMap); if (!place?.secure || placeMaps.has(place.id)) return;
+    if (placeMapObserver) placeMapObserver.observe(container); else createPlaceMap(container);
   });
+}
+function sharedLiveLocations(conversationId = state.active) {
+  const latest = new Map();
+  for (const message of state.messages) if (message.conversationId === conversationId && message.kind === 'location' && message.secure && message.body.active && message.body.expires > Date.now()) {
+    const previous = latest.get(message.senderId); if (!previous || message.body.updated > previous.body.updated) latest.set(message.senderId, message);
+  }
+  return [...latest.values()].sort((a, b) => Number(a.senderId !== state.me.id) - Number(b.senderId !== state.me.id));
+}
+function locationPerson(message) {
+  const mine = message.senderId === state.me.id, peer = state.conversations.find(item => item.id === message.conversationId)?.peer;
+  return { mine, name: mine ? 'You' : peer?.name || 'Your friend', initial: initials(mine ? state.me.name : peer?.name || 'Friend').slice(0, 1) };
+}
+function locationMarkerElement(message) {
+  const person = locationPerson(message), element = document.createElement('div'); element.className = `shared-location-marker ${person.mine ? 'mine' : 'peer'}`;
+  const pin = document.createElement('span'), initial = document.createElement('b'), label = document.createElement('small'); initial.textContent = person.initial; label.textContent = person.name; pin.append(initial); element.append(pin, label); return element;
+}
+function syncLocationEntry(entry, animate = true) {
+  const locations = sharedLiveLocations(entry.conversationId), activeIds = new Set(locations.map(message => message.senderId));
+  for (const [senderId, marker] of entry.markers) if (!activeIds.has(senderId)) { marker.remove(); entry.markers.delete(senderId); }
+  for (const message of locations) {
+    let marker = entry.markers.get(message.senderId);
+    if (!marker) { marker = new maplibregl.Marker({ element: locationMarkerElement(message), anchor: 'bottom' }).addTo(entry.map); entry.markers.set(message.senderId, marker); }
+    marker.setLngLat([message.body.longitude, message.body.latitude]);
+  }
+  if (locations.length > 1) {
+    const bounds = new maplibregl.LngLatBounds(); locations.forEach(message => bounds.extend([message.body.longitude, message.body.latitude]));
+    entry.map.fitBounds(bounds, { padding: entry.large ? 80 : 35, maxZoom: 15, duration: animate ? 600 : 0 });
+  } else if (locations.length === 1) entry.map.easeTo({ center: [locations[0].body.longitude, locations[0].body.latitude], zoom: entry.large ? 15 : 14.5, duration: animate ? 600 : 0 });
+  return locations;
+}
+function syncEveryLocationMap(conversationId = state.active) {
+  for (const entry of locationMaps.values()) if (entry.conversationId === conversationId) syncLocationEntry(entry);
+  if (combinedLocationEntry?.conversationId === conversationId) updateCombinedLocationMap();
+}
+function createLocationMap(container) {
+  const message = state.messages.find(item => item.id === container.dataset.locationMap); if (!message || locationMaps.has(message.id) || !container.isConnected) return;
+  try {
+    const map = new maplibregl.Map({ container, style: state.config.mapStyleUrl, center: [message.body.longitude, message.body.latitude], zoom: 14.5, attributionControl: false });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right'); map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+    const entry = { map, markers: new Map(), conversationId: message.conversationId, large: false }; locationMaps.set(message.id, entry); map.once('load', () => syncLocationEntry(entry, false));
+  } catch { container.classList.add('map-failed'); container.textContent = 'The map could not be loaded'; }
 }
 function mountLocationMaps() {
   if (!state.config.mapStyleUrl) return;
+  locationMapObserver ||= 'IntersectionObserver' in window ? new IntersectionObserver(entries => { for (const entry of entries) if (entry.isIntersecting) { locationMapObserver.unobserve(entry.target); createLocationMap(entry.target); } }, { root: $('messageArea'), rootMargin: '500px 0px' }) : null;
   document.querySelectorAll('[data-location-map]').forEach(container => {
     const message = state.messages.find(item => item.id === container.dataset.locationMap);
     if (!message || locationMaps.has(message.id)) return;
-    try {
-      const center = [message.body.longitude, message.body.latitude];
-      const map = new maplibregl.Map({ container, style: state.config.mapStyleUrl, center, zoom: 14.5, attributionControl: false });
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-      const marker = new maplibregl.Marker({ color: '#175c46' }).setLngLat(center).addTo(map);
-      locationMaps.set(message.id, { map, marker });
-    } catch {
-      container.classList.add('map-failed'); container.textContent = 'The map could not be loaded';
-    }
+    if (locationMapObserver) locationMapObserver.observe(container); else createLocationMap(container);
   });
 }
 function refreshLocationMap(message) {
-  const entry = locationMaps.get(message.id), row = document.querySelector(`[data-message-id="${CSS.escape(message.id)}"]`);
-  if (!entry || !row || !message.body.active || message.body.expires <= Date.now()) return false;
-  const center = [message.body.longitude, message.body.latitude];
-  entry.marker.setLngLat(center); entry.map.easeTo({ center, duration: 600 });
+  const row = document.querySelector(`[data-message-id="${CSS.escape(message.id)}"]`);
+  if (!row || !message.body.active || message.body.expires <= Date.now()) { const entry = locationMaps.get(message.id); entry?.map.remove(); locationMaps.delete(message.id); syncEveryLocationMap(message.conversationId); return false; }
   const coordinate = row.querySelector('.map-coordinate');
   if (coordinate) coordinate.textContent = `${message.body.latitude.toFixed(5)}, ${message.body.longitude.toFixed(5)}`;
   const details = row.querySelector('[data-location-details]');
   if (details) details.textContent = `Until ${time(message.body.expires)} · ${Date.now() - message.body.updated > 60000 ? 'Last location ' : 'Updated '}${time(message.body.updated)}${message.body.accuracy != null ? ` · ±${Math.round(message.body.accuracy)} m` : ''}`;
-  return true;
+  syncEveryLocationMap(message.conversationId); return true;
 }
+function updateCombinedLocationMap() {
+  if (!combinedLocationEntry) return;
+  const locations = syncLocationEntry(combinedLocationEntry), peer = currentConversation()?.peer;
+  $('liveMapStatus').textContent = locations.length > 1 ? `${state.me.name} and ${peer?.name || 'your friend'} are sharing live location` : locations.length ? `Waiting for ${peer?.name || 'your friend'} to share live location` : 'No active live location';
+  $('liveMapPeople').innerHTML = locations.map(message => { const person = locationPerson(message), age = Math.max(0, Math.round((Date.now() - message.body.updated) / 1000)); return `<span class="live-map-person ${person.mine ? 'mine' : 'peer'}"><i></i><b>${escapeHTML(person.name)}</b><small>${age < 10 ? 'Live now' : `${age}s ago`}</small></span>`; }).join('');
+}
+function openCombinedLocationMap(conversationId = state.active) {
+  if (!state.config.mapStyleUrl) return toast('The map is not configured on this server.');
+  showDialog('liveMapDialog'); requestAnimationFrame(() => {
+    destroyCombinedLocationMap();
+    try { const first = sharedLiveLocations(conversationId)[0], map = new maplibregl.Map({ container: $('combinedLiveMap'), style: state.config.mapStyleUrl, center: first ? [first.body.longitude, first.body.latitude] : [101.6869, 3.139], zoom: 14, attributionControl: false }); map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right'); map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left'); combinedLocationEntry = { map, markers: new Map(), conversationId, large: true }; map.once('load', () => updateCombinedLocationMap()); }
+    catch { $('combinedLiveMap').textContent = 'The map could not be loaded.'; }
+  });
+}
+$('liveMapDialog').addEventListener('close', destroyCombinedLocationMap);
 function needAccount(fn) { if (!state.me) { showDialog('authDialog'); return; } fn(); }
 function currentConversation() { return state.conversations.find(c => c.id === state.active); }
 function setAuthMode(mode) {
@@ -268,6 +375,30 @@ for (const d of document.querySelectorAll('dialog')) d.addEventListener('click',
 });
 $('callDialog').addEventListener('cancel', e => { e.preventDefault(); hangup(); });
 
+function refreshSoundSettings() {
+  const native = !!window.ZbuddyAndroid?.chooseSound;
+  $('nativeSoundSettings').hidden = !native; $('webSoundSettings').hidden = native;
+  if (native) {
+    try {
+      $('notificationSoundName').textContent = window.ZbuddyAndroid.getSoundName('notification') || 'Device default';
+      $('callRingtoneName').textContent = window.ZbuddyAndroid.getSoundName('call') || 'Device default';
+    } catch {}
+  } else $('webRingtone').value = soundSettings().ringtone;
+}
+function openSoundSettings() { refreshSoundSettings(); showDialog('soundDialog'); }
+$('chooseNotificationSound').onclick = () => { try { window.ZbuddyAndroid?.chooseSound?.('notification'); } catch { toast('The Android sound picker could not be opened.'); } };
+$('chooseCallRingtone').onclick = () => { try { window.ZbuddyAndroid?.chooseSound?.('call'); } catch { toast('The Android sound picker could not be opened.'); } };
+$('webRingtone').onchange = () => {
+  const ringtone = ['classic','gentle','pulse','silent'].includes($('webRingtone').value) ? $('webRingtone').value : 'classic';
+  localStorage.setItem('zbuddy-sounds', JSON.stringify({ ringtone }));
+};
+$('previewRingtone').onclick = () => {
+  clearTimeout(soundPreviewTimer); startWebCallSound($('webRingtone').value);
+  soundPreviewTimer = setTimeout(stopCallSound, 2600);
+};
+$('soundDialog').addEventListener('close', () => { clearTimeout(soundPreviewTimer); soundPreviewTimer = null; if (!state.call) stopCallSound(); });
+window.addEventListener('zbuddy:sound-changed', refreshSoundSettings);
+
 async function getPeer(conversationId) {
   if (!peers.has(conversationId)) {
     const me = state.me, identity = state.identity;
@@ -287,7 +418,8 @@ async function sealPayload(id, clientId, payload) {
   return encryptPayload(state.identity, await getPeer(id), id, state.me.id, clientId, payload);
 }
 async function decodeWire(m) {
-  if (!m || m.kind !== 'encrypted') return m ? { ...m, legacy: !m.secure } : m;
+  if (!m || m.kind === 'deleted') return m ? { ...m, body: {}, secure: true } : m;
+  if (m.kind !== 'encrypted') return { ...m, legacy: !m.secure };
   try {
     const payload = await decryptPayload(state.identity, await getPeer(m.conversationId), m, state.me.id);
     if (!['text', 'image', 'location'].includes(payload.kind)) throw new Error();
@@ -295,6 +427,7 @@ async function decodeWire(m) {
     if (kind === 'text' && (typeof body.text !== 'string' || body.text.length > 4000)) throw new Error();
     if (kind === 'image' && (!/^\/media\/[a-f0-9-]{36}$/.test(body.url) || !['image/webp','image/png','image/jpeg'].includes(body.mime) || typeof body.key !== 'string' || typeof body.iv !== 'string')) throw new Error();
     if (kind === 'location' && (!Number.isFinite(body.latitude) || !Number.isFinite(body.longitude) || Math.abs(body.latitude) > 90 || Math.abs(body.longitude) > 180 || !Number.isFinite(body.updated) || !Number.isFinite(body.expires))) throw new Error();
+    if (body.reply && (typeof body.reply.id !== 'string' || typeof body.reply.senderId !== 'string' || typeof body.reply.text !== 'string' || body.reply.text.length > 180)) throw new Error();
     return { ...m, kind, body, secure: true };
   } catch { return { ...m, kind: 'text', body: { text: 'This message could not be opened. Sign in again and check your account key.' }, secure: false, locked: true }; }
 }
@@ -362,7 +495,7 @@ async function boot(user, password) {
   socket.on('message:updated', raw => enqueue(async () => {
     const m = await decodeWire(raw); if (!state.me) return;
     const index = state.messages.findIndex(x => x.id === m.id);
-    if (index !== -1) { state.messages[index] = m; if (m.kind !== 'location' || !refreshLocationMap(m)) renderMessages(false); }
+    if (index !== -1) { state.messages[index] = m; if (m.kind !== 'location' || !refreshLocationMap(m)) replaceMessageRow(m); }
     const c = state.conversations.find(x => x.id === m.conversationId);
     if (c?.last?.id === m.id) { c.last = m; renderConversations(); }
     if (m.kind === 'location' && !m.body.active && state.watches.has(m.id)) removeWatch(m.id);
@@ -380,16 +513,22 @@ async function boot(user, password) {
   });
   socket.on('messages:read', ({ conversationId, userId, at }) => {
     if (conversationId === state.active) {
-      state.messages.forEach(m => { if (m.senderId !== userId && !m.readAt) { m.deliveredAt ||= at; m.readAt = at; } }); renderMessages(false);
+      state.messages.forEach(m => { if (m.senderId !== userId && !m.readAt) { m.deliveredAt ||= at; m.readAt = at; updateDeliveryStatus(m); } });
     }
     const c = state.conversations.find(c => c.id === conversationId);
     if (c) { if (userId === state.me.id) c.unread = 0; if (c.last && c.last.senderId !== userId) { c.last.deliveredAt ||= at; c.last.readAt ||= at; } renderConversations(); }
   });
   socket.on('messages:delivered', ({ conversationId, messageIds, at }) => {
     const ids = new Set(messageIds || []);
-    if (conversationId === state.active) { state.messages.forEach(m => { if (ids.has(m.id)) m.deliveredAt ||= at; }); renderMessages(false); }
+    if (conversationId === state.active) { state.messages.forEach(m => { if (ids.has(m.id)) { m.deliveredAt ||= at; updateDeliveryStatus(m); } }); }
     const c = state.conversations.find(c => c.id === conversationId);
     if (c?.last && ids.has(c.last.id)) { c.last.deliveredAt ||= at; renderConversations(); }
+  });
+  socket.on('message:deleted', ({ id, mode, deletedAt }) => {
+    const index = state.messages.findIndex(message => message.id === id); if (index === -1) return;
+    if (mode === 'me') { state.messages.splice(index, 1); renderMessages(false); }
+    else { state.messages[index] = { ...state.messages[index], kind: 'deleted', body: {}, deletedAt }; replaceMessageRow(state.messages[index]); }
+    refreshConversations().catch(() => {});
   });
   socket.on('typing', d => {
     if (d.conversationId !== state.active) return;
@@ -404,7 +543,7 @@ async function boot(user, password) {
     // Assign here as well: the receiver may answer before call:start's acknowledgement arrives.
     if (!call.id) call.id = d.id;
     if (call.id !== d.id) return;
-    try { call.accepted = true; setCallStatus('Connecting call…'); await offerCall(); }
+    try { call.accepted = true; stopCallSound(); setCallStatus('Connecting call…'); await offerCall(); }
     catch (e) { toast(e.message); hangup(); }
   });
   socket.on('call:handled', d => { if (state.call?.id === d.id) cleanupCall(); });
@@ -428,7 +567,7 @@ async function boot(user, password) {
 function resetSession() {
   for (const id of [...state.watches.keys()]) removeWatch(id);
   state.identity = null; peers.clear(); stoppedEnvelopes.clear();
-  destroyLocationMaps(); destroyPlaceMaps();
+  destroyLocationMaps(); destroyCombinedLocationMap(); destroyPlaceMaps();
   for (const promise of imageCache.values()) promise.then(url => URL.revokeObjectURL(url)).catch(() => {});
   imageCache.clear(); $('fullImage').removeAttribute('src'); $('messages').innerHTML = '';
   state.me = null; state.active = null; state.messages = []; state.places = []; state.placeDraft = null; state.conversations = []; state.pushEnabled = false;
@@ -436,7 +575,7 @@ function resetSession() {
   $('app').classList.remove('chat-open');
   $('chatPanel').hidden = true; $('welcome').hidden = false;
   $('offlineBanner').hidden = true; $('connectionText').textContent = 'Secure connection';
-  clearAttachment(); renderConversations();
+  clearAttachment(); clearReply(); renderConversations();
   $('profileButton').replaceChildren(); $('profileButton').textContent = 'S';
 }
 async function refreshConversations() {
@@ -451,9 +590,10 @@ async function refreshConversations() {
 function preview(m) {
   if (!m) return 'Start your story…';
   const own = m.senderId === state.me?.id ? 'You: ' : '';
+  if (m.kind === 'deleted') return `${own}Message deleted`;
   if (m.kind === 'image') return `${own}Image${m.body.caption ? ' · ' + m.body.caption : ''}`;
   if (m.kind === 'location') return `${own}${m.body.active && m.body.expires > Date.now() ? 'Live location' : 'Last location'}`;
-  return own + m.body.text;
+  return own + (m.body?.text || 'Message');
 }
 function renderConversations() {
   $('chatCount').textContent = state.conversations.length;
@@ -467,8 +607,25 @@ function renderConversations() {
     $('conversationList').querySelector('[data-new-chat]').onclick = openPeople;
     return;
   }
-  $('conversationList').innerHTML = cs.map(c => `<button class="conversation-row ${c.id === state.active ? 'selected' : ''}" data-conversation="${c.id}" aria-label="Chat with ${escapeHTML(c.peer.name)}" ${c.id === state.active ? 'aria-current="true"' : ''}>${avatarHTML(c.peer, c.peer.online)}<div class="conversation-summary"><div class="row-top"><h3>${escapeHTML(c.peer.name)}</h3><time>${c.last ? (today(c.last.created) ? time(c.last.created) : new Date(c.last.created).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })) : ''}</time></div><div class="row-bottom"><p>${escapeHTML(preview(c.last))}</p>${c.unread ? `<span class="unread-badge">${c.unread > 99 ? '99+' : c.unread}</span>` : ''}</div></div></button>`).join('');
-  $('conversationList').querySelectorAll('[data-conversation]').forEach(b => { b.onclick = () => openConversation(b.dataset.conversation); });
+  const list = $('conversationList'), keep = new Set(cs.map(c => c.id));
+  list.querySelectorAll('[data-conversation]').forEach(row => { if (!keep.has(row.dataset.conversation)) row.remove(); });
+  list.querySelector('.sidebar-empty')?.remove();
+  for (const c of cs) {
+    let row = list.querySelector(`[data-conversation="${CSS.escape(c.id)}"]`);
+    if (!row) {
+      row = document.createElement('button'); row.className = 'conversation-row'; row.dataset.conversation = c.id;
+      row.innerHTML = '<span class="avatar"></span><div class="conversation-summary"><div class="row-top"><h3></h3><time></time></div><div class="row-bottom"><p></p><span class="unread-badge" hidden></span></div></div>';
+      row.onclick = () => openConversation(row.dataset.conversation); list.append(row);
+    }
+    const avatarKey = `${c.peer.avatar || ''}|${c.peer.color}|${c.peer.name}|${c.peer.online}`;
+    if (row.dataset.avatarKey !== avatarKey) { const holder = document.createElement('div'); holder.innerHTML = avatarHTML(c.peer, c.peer.online); row.querySelector('.avatar').replaceWith(holder.firstElementChild); row.dataset.avatarKey = avatarKey; }
+    row.classList.toggle('selected', c.id === state.active); row.setAttribute('aria-label', `Chat with ${c.peer.name}`);
+    if (c.id === state.active) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current');
+    row.querySelector('h3').textContent = c.peer.name; row.querySelector('time').textContent = c.last ? (today(c.last.created) ? time(c.last.created) : new Date(c.last.created).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })) : '';
+    row.querySelector('.row-bottom p').textContent = preview(c.last);
+    const badge = row.querySelector('.unread-badge'); badge.hidden = !c.unread; badge.textContent = c.unread > 99 ? '99+' : c.unread || '';
+    list.append(row);
+  }
 }
 function renderHeader() {
   const c = currentConversation(); if (!c) return;
@@ -489,7 +646,7 @@ function lastSeenText(at) {
 async function openConversation(id) {
   const ticket = ++conversationRequest;
   state.active = id; state.messages = []; state.cursor = null;
-  clearAttachment(); $('messageInput').value = ''; resizeInput();
+  clearAttachment(); clearReply(); $('messageInput').value = ''; resizeInput();
   $('welcome').hidden = true; $('chatPanel').hidden = false;
   $('app').classList.add('chat-open'); $('app').classList.remove('preview');
   $('typingIndicator').hidden = true;
@@ -543,31 +700,128 @@ function linkText(text) {
 function messageHTML(m) {
   const mine = m.senderId === state.me.id;
   let content;
-  if (m.kind === 'image') content = `<img class="message-image" alt="${escapeHTML(m.body.caption || 'Shared image')}" data-image="${m.id}">${m.body.caption ? `<p class="message-text image-caption">${linkText(m.body.caption)}</p>` : ''}${m.secure ? `<div class="image-compression-label">${icon('lock')} ${formatBytes(m.body.size || 0)} · compressed & encrypted</div>` : ''}`;
+  const reply = m.body?.reply ? `<button class="message-reply" data-jump-message="${escapeHTML(m.body.reply.id)}"><b>${escapeHTML(m.body.reply.senderId === state.me.id ? 'You' : currentConversation()?.peer.name || 'Message')}</b><span>${escapeHTML(m.body.reply.text)}</span></button>` : '';
+  if (m.kind === 'deleted') content = '<p class="message-text deleted-message">This message was deleted.</p>';
+  else if (m.kind === 'image') content = `${reply}<img class="message-image" alt="${escapeHTML(m.body.caption || 'Shared image')}" data-image="${m.id}" loading="lazy">${m.body.caption ? `<p class="message-text image-caption">${linkText(m.body.caption)}</p>` : ''}${m.secure ? `<div class="image-compression-label">${icon('lock')} ${formatBytes(m.body.size || 0)} · compressed & encrypted</div>` : ''}`;
   else if (m.kind === 'location') {
     const b = m.body, active = m.secure && b.active && b.expires > Date.now();
     const stale = Date.now() - b.updated > 60000;
     const watching = state.watches.has(m.id);
     const maps = `https://www.google.com/maps/search/?api=1&query=${b.latitude},${b.longitude}`;
-    content = `<div class="message-map-wrap"><div class="message-map" data-location-map="${m.id}" aria-label="Interactive location map"></div><span class="map-coordinate">${b.latitude.toFixed(5)}, ${b.longitude.toFixed(5)}</span></div><div class="location-content"><strong>${active ? '<span class="live-dot"></span>' : ''}${active ? 'Live location' : 'Sharing ended'}</strong><p data-location-details>${active ? `Until ${time(b.expires)} · ` : ''}${stale ? 'Last location ' : 'Updated '}${time(b.updated)}${b.accuracy != null ? ` · ±${Math.round(b.accuracy)} m` : ''}</p><a class="location-link" href="${maps}" target="_blank" rel="noopener noreferrer">Open in maps ${icon('external')}</a><button class="text-button save-place" data-save-place="${m.id}">${icon('heart')} Save place</button>${mine && active ? `<button class="stop-location" data-stop-location="${m.id}">Stop sharing</button>${!watching ? `<button class="text-button" data-resume-location="${m.id}">Resume location updates</button>` : ''}` : ''}</div>`;
-  } else content = `<p class="message-text">${m.locked ? icon('lock') : ''}${linkText(m.body.text)}</p>`;
+    content = `${reply}<div class="message-map-wrap"><div class="message-map" data-location-map="${m.id}" aria-label="Interactive map showing shared live locations"></div><span class="map-coordinate">${b.latitude.toFixed(5)}, ${b.longitude.toFixed(5)}</span></div><div class="location-content"><strong>${active ? '<span class="live-dot"></span>' : ''}${active ? 'Live location' : 'Sharing ended'}</strong><p data-location-details>${active ? `Until ${time(b.expires)} · ` : ''}${stale ? 'Last location ' : 'Updated '}${time(b.updated)}${b.accuracy != null ? ` · ±${Math.round(b.accuracy)} m` : ''}</p>${active ? `<button class="text-button view-together" data-open-live-map="${m.conversationId}">${icon('pin')} View both on live map</button>` : ''}<a class="location-link" href="${maps}" target="_blank" rel="noopener noreferrer">Open in maps ${icon('external')}</a><button class="text-button save-place" data-save-place="${m.id}">${icon('heart')} Save place</button>${mine && active ? `<button class="stop-location" data-stop-location="${m.id}">Stop sharing</button>${!watching ? `<button class="text-button" data-resume-location="${m.id}">Resume location updates</button>` : ''}` : ''}</div>`;
+  } else content = `${reply}<p class="message-text">${m.locked ? icon('lock') : ''}${linkText(m.body.text)}</p>`;
   const status = m.readAt ? { cls: 'read', title: 'Read', icon: 'check' } : m.deliveredAt ? { cls: 'delivered', title: 'Delivered', icon: 'check' } : { cls: 'sent', title: 'Sent', icon: 'check-one' };
-  return `<div class="message-row ${mine ? 'mine' : ''}" data-message-id="${m.id}"><div class="message-bubble ${m.kind === 'image' || m.kind === 'location' ? 'image-bubble' : ''}">${content}${m.legacy ? '<span class="legacy-label">Legacy message · not encrypted</span>' : ''}<div class="message-meta">${m.secure ? icon('lock') : ''}<time datetime="${new Date(m.created).toISOString()}">${time(m.created)}</time>${mine ? `<span class="delivery-status ${status.cls}" title="${status.title}" aria-label="${status.title}">${icon(status.icon)}</span>` : ''}</div></div></div>`;
+  return `<div class="message-row ${mine ? 'mine' : ''} ${m.pending ? 'pending' : ''} ${m.failed ? 'failed' : ''}" data-message-id="${m.id}"><div class="message-bubble ${m.kind === 'image' || m.kind === 'location' ? 'image-bubble' : ''}">${content}${m.legacy ? '<span class="legacy-label">Legacy message · not encrypted</span>' : ''}<div class="message-meta">${m.secure ? icon('lock') : ''}<time datetime="${new Date(m.created).toISOString()}">${time(m.created)}</time>${mine ? `<span class="delivery-status ${status.cls}" title="${m.pending ? 'Sending' : status.title}" aria-label="${m.pending ? 'Sending' : status.title}">${m.pending ? '…' : icon(status.icon)}</span>` : ''}</div></div></div>`;
+}
+const imageObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+  for (const entry of entries) if (entry.isIntersecting) {
+    const img = entry.target; imageObserver.unobserve(img);
+    const m = state.messages.find(item => item.id === img.dataset.image); if (!m) continue;
+    imageSource(m).then(async url => { if (!img.isConnected) return; img.src = url; try { await img.decode(); } catch {} if (Date.now() < bottomPinUntil) scrollMessagesToBottom(); })
+      .catch(error => { if (img.isConnected) { img.alt = 'Encrypted image could not be opened'; toast(error.message); } });
+  }
+}, { root: $('messageArea'), rootMargin: '500px 0px' }) : null;
+function messagePreview(m) {
+  if (!m || m.kind === 'deleted') return 'Deleted message';
+  if (m.kind === 'image') return m.body.caption || 'Image';
+  if (m.kind === 'location') return 'Live location';
+  return String(m.body.text || '').replace(/\s+/g, ' ').slice(0, 180);
+}
+function setReply(m) {
+  if (!m || m.kind === 'deleted') return;
+  state.reply = { id: m.id, senderId: m.senderId, text: messagePreview(m) };
+  $('replyName').textContent = m.senderId === state.me.id ? 'Replying to yourself' : `Replying to ${currentConversation()?.peer.name || 'message'}`;
+  $('replyText').textContent = state.reply.text; $('replyPreview').hidden = false; focusComposer();
+}
+function clearReply() { state.reply = null; $('replyPreview').hidden = true; }
+$('cancelReply').onclick = clearReply;
+function jumpToMessage(id) {
+  const row = $('messages').querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+  if (!row) return toast('The original message is not loaded yet.');
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.classList.remove('message-highlight'); requestAnimationFrame(() => row.classList.add('message-highlight')); setTimeout(() => row.classList.remove('message-highlight'), 1600);
+}
+function openMessageActions(id) {
+  const m = state.messages.find(item => item.id === id); if (!m || m.pending) return;
+  state.actionMessage = m; $('actionReply').hidden = m.kind === 'deleted'; $('actionDeleteEveryone').hidden = m.senderId !== state.me.id || m.kind === 'deleted'; showDialog('messageActionDialog');
+}
+$('actionReply').onclick = () => { const message = state.actionMessage; $('messageActionDialog').close(); if (message) setReply(message); };
+async function deleteAction(mode) {
+  const message = state.actionMessage; if (!message) return;
+  if (mode === 'everyone' && !confirm('Delete this message for everyone?')) return;
+  $('actionDeleteMe').disabled = true; $('actionDeleteEveryone').disabled = true;
+  try {
+    await api(`/messages/${encodeURIComponent(message.id)}`, { method: 'DELETE', body: { mode } });
+    const index = state.messages.findIndex(item => item.id === message.id);
+    if (index !== -1) {
+      if (mode === 'me') { state.messages.splice(index, 1); renderMessages(false); }
+      else { state.messages[index] = { ...message, kind: 'deleted', body: {}, deletedAt: Date.now() }; replaceMessageRow(state.messages[index]); }
+    }
+    $('messageActionDialog').close(); refreshConversations().catch(() => {});
+  } catch (error) { toast(error.message); }
+  finally { $('actionDeleteMe').disabled = false; $('actionDeleteEveryone').disabled = false; state.actionMessage = null; }
+}
+$('actionDeleteMe').onclick = () => deleteAction('me');
+$('actionDeleteEveryone').onclick = () => deleteAction('everyone');
+function bindMessageInteractions(root = $('messages')) {
+  root.querySelectorAll('[data-image]').forEach(img => {
+    if (imageObserver) imageObserver.observe(img); else {
+      const m = state.messages.find(x => x.id === img.dataset.image); if (m) imageSource(m).then(url => { if (img.isConnected) img.src = url; }).catch(error => toast(error.message));
+    }
+    img.onclick = async () => { const m = state.messages.find(x => x.id === img.dataset.image); if (!m) return; try { state.fullImageMessage = m; $('fullImage').src = await imageSource(m); showDialog('imageDialog'); } catch (error) { toast(error.message); } };
+  });
+  root.querySelectorAll('[data-jump-message]').forEach(button => { button.onclick = event => { event.stopPropagation(); jumpToMessage(button.dataset.jumpMessage); }; });
+  const rows = [...(root.matches?.('.message-row') ? [root] : []), ...root.querySelectorAll('.message-row')];
+  rows.forEach(row => {
+    let timer, startX = 0, startY = 0;
+    row.onpointerdown = event => { if (event.button !== 0) return; startX = event.clientX; startY = event.clientY; timer = setTimeout(() => { navigator.vibrate?.(20); openMessageActions(row.dataset.messageId); }, 520); };
+    row.onpointermove = event => { if (Math.abs(event.clientX-startX) > 12 || Math.abs(event.clientY-startY) > 12) clearTimeout(timer); };
+    row.onpointerup = row.onpointercancel = () => clearTimeout(timer);
+    row.oncontextmenu = event => { event.preventDefault(); openMessageActions(row.dataset.messageId); };
+  });
+}
+function bindLocationActions(root = $('messages')) {
+  root.querySelectorAll('[data-stop-location]').forEach(button => { button.onclick = () => stopLocation(button.dataset.stopLocation); });
+  root.querySelectorAll('[data-resume-location]').forEach(button => { button.onclick = () => resumeLocation(button.dataset.resumeLocation); });
+  root.querySelectorAll('[data-save-place]').forEach(button => { button.onclick = () => openSavePlace(button.dataset.savePlace); });
+  root.querySelectorAll('[data-open-live-map]').forEach(button => { button.onclick = () => openCombinedLocationMap(button.dataset.openLiveMap); });
+}
+function appendMessage(m) {
+  const container = $('messages'); container.querySelector('.empty-message')?.remove();
+  const previous = state.messages.at(-2), d = day(m.created);
+  if (!previous || day(previous.created) !== d) container.insertAdjacentHTML('beforeend', `<div class="day-marker">${today(m.created) ? 'Today' : d}</div>`);
+  container.insertAdjacentHTML('beforeend', messageHTML(m));
+  const row = container.querySelector(`[data-message-id="${CSS.escape(m.id)}"]`); if (row) { bindMessageInteractions(row); bindLocationActions(row); }
+  if (m.kind === 'location') { mountLocationMaps(); syncEveryLocationMap(m.conversationId); }
+  pinMessagesToBottom();
+}
+function replaceMessageRow(m) {
+  const existing = $('messages').querySelector(`[data-message-id="${CSS.escape(m.id)}"]`);
+  if (!existing) return;
+  const wrapper = document.createElement('div'); wrapper.innerHTML = messageHTML(m);
+  const replacement = wrapper.firstElementChild; existing.replaceWith(replacement); bindMessageInteractions(replacement); bindLocationActions(replacement);
+  if (m.kind === 'location') { mountLocationMaps(); syncEveryLocationMap(m.conversationId); }
+}
+function updateDeliveryStatus(message) {
+  const target = $('messages').querySelector(`[data-message-id="${CSS.escape(message.id)}"] .delivery-status`); if (!target) return;
+  const status = message.readAt ? { cls: 'read', title: 'Read', icon: 'check' } : message.deliveredAt ? { cls: 'delivered', title: 'Delivered', icon: 'check' } : { cls: 'sent', title: 'Sent', icon: 'check-one' };
+  target.className = `delivery-status ${status.cls}`; target.title = status.title; target.setAttribute('aria-label', status.title); target.innerHTML = icon(status.icon);
 }
 function scrollMessagesToBottom() {
   const area = $('messageArea'), conversationId = state.active;
-  const pin = () => { if (state.active === conversationId && area.isConnected) area.scrollTop = area.scrollHeight; };
+  const pin = () => { if (state.active === conversationId && area.isConnected) area.scrollTo({ top: area.scrollHeight, behavior: 'auto' }); };
   pin();
   requestAnimationFrame(() => { pin(); requestAnimationFrame(pin); });
+  setTimeout(pin, 80); setTimeout(pin, 220); setTimeout(pin, 450);
 }
+function pinMessagesToBottom(duration = 1400) { bottomPinUntil = Math.max(bottomPinUntil, Date.now() + duration); scrollMessagesToBottom(); }
 function focusComposer() {
   if (!state.active) return;
   try { $('messageInput').focus({ preventScroll: true }); }
-  catch { $('messageInput').focus(); scrollMessagesToBottom(); }
+  catch { $('messageInput').focus(); pinMessagesToBottom(); }
 }
 function renderMessages(forceBottom) {
   const area = $('messageArea');
-  const closeToBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 110;
+  const closeToBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 110 || Date.now() < bottomPinUntil;
   const oldTop = area.scrollTop;
   let lastDay = '';
   destroyLocationMaps();
@@ -576,15 +830,8 @@ function renderMessages(forceBottom) {
     lastDay = d; return label + messageHTML(m);
   }).join('') : '<div class="empty-message">One “hello” can begin a beautiful story. 👋</div>';
   $('olderMessages').hidden = !state.cursor;
-  $('messages').querySelectorAll('[data-image]').forEach(img => {
-    const m = state.messages.find(x => x.id === img.dataset.image);
-    imageSource(m).then(url => { if (img.isConnected) img.src = url; }).catch(e => { if (img.isConnected) { img.alt = 'Encrypted image could not be opened'; toast(e.message); } });
-    img.onclick = async () => { try { $('fullImage').src = await imageSource(m); showDialog('imageDialog'); } catch (e) { toast(e.message); } };
-    img.addEventListener('load', () => { if (forceBottom || closeToBottom) scrollMessagesToBottom(); }, { once: true });
-  });
-  $('messages').querySelectorAll('[data-stop-location]').forEach(b => { b.onclick = () => stopLocation(b.dataset.stopLocation); });
-  $('messages').querySelectorAll('[data-resume-location]').forEach(b => { b.onclick = () => resumeLocation(b.dataset.resumeLocation); });
-  $('messages').querySelectorAll('[data-save-place]').forEach(b => { b.onclick = () => openSavePlace(b.dataset.savePlace); });
+  bindMessageInteractions();
+  bindLocationActions();
   mountLocationMaps();
   if (forceBottom || closeToBottom) scrollMessagesToBottom(); else area.scrollTop = oldTop;
 }
@@ -592,7 +839,14 @@ async function onMessage(raw) {
   const m = raw.kind === 'encrypted' ? await decodeWire(raw) : raw;
   if (!state.me) return;
   acknowledgeDelivered([m]);
-  if (m.conversationId === state.active && !state.messages.some(x => x.id === m.id)) { state.messages.push(m); renderMessages(m.senderId === state.me.id); markRead().catch(() => {}); }
+  if (m.conversationId === state.active) {
+    const optimisticIndex = state.messages.findIndex(item => item.pending && item.senderId === m.senderId && item.clientId === m.clientId);
+    if (optimisticIndex !== -1) {
+      const oldId = state.messages[optimisticIndex].id, oldRow = $('messages').querySelector(`[data-message-id="${CSS.escape(oldId)}"]`); state.messages[optimisticIndex] = m;
+      if (oldRow) { const wrapper = document.createElement('div'); wrapper.innerHTML = messageHTML(m); const replacement = wrapper.firstElementChild; oldRow.replaceWith(replacement); bindMessageInteractions(replacement); bindLocationActions(replacement); if (m.kind === 'location') { mountLocationMaps(); syncEveryLocationMap(m.conversationId); } }
+    } else if (!state.messages.some(x => x.id === m.id)) { state.messages.push(m); appendMessage(m); }
+    markRead().catch(() => {}); if (m.senderId !== state.me.id && !document.hidden) playTonePattern('gentle');
+  }
   const c = state.conversations.find(c => c.id === m.conversationId);
   if (!c) { refreshConversations().catch(e => toast(e.message)); return; }
   const duplicate = c.last?.id === m.id;
@@ -607,8 +861,9 @@ for (const b of document.querySelectorAll('[data-filter]')) b.onclick = () => {
   document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('active', x === b));
   renderConversations();
 };
-$('backButton').onclick = () => { $('app').classList.remove('chat-open'); state.active = null; conversationRequest++; destroyLocationMaps(); $('chatPanel').hidden = true; $('welcome').hidden = false; renderConversations(); };
-$('railChats').onclick = () => { $('app').classList.remove('preview', 'chat-open'); };
+function setRailActive(id = 'railChats') { document.querySelectorAll('.rail .rail-btn').forEach(button => button.classList.toggle('active', button.id === id)); }
+$('backButton').onclick = () => { $('app').classList.remove('chat-open'); state.active = null; conversationRequest++; destroyLocationMaps(); $('chatPanel').hidden = true; $('welcome').hidden = false; setRailActive(); renderConversations(); };
+$('railChats').onclick = () => { $('app').classList.remove('preview', 'chat-open'); setRailActive(); };
 const profileItem = (label, value, link) => value ? `<div class="profile-detail"><span>${escapeHTML(label)}</span>${link ? `<a href="${escapeHTML(link)}" target="_blank" rel="noopener noreferrer">${escapeHTML(value)}</a>` : `<p>${escapeHTML(value)}</p>`}</div>` : '';
 async function openProfile(userId) {
   $('profileBody').innerHTML = '<p class="people-empty">Loading profile…</p>'; $('profileMessage').hidden = true; showDialog('profileDialog');
@@ -629,7 +884,8 @@ async function openProfile(userId) {
       profileItem('Instagram', p.instagram ? `@${p.instagram}` : '', p.instagram ? `https://www.instagram.com/${encodeURIComponent(p.instagram)}/` : ''),
       profileItem('Facebook', p.facebook), profileItem('Website', p.website, p.website),
     ].join('');
-    $('profileBody').innerHTML = `<div class="profile-hero">${avatarHTML(user)}<div><h3>${escapeHTML(user.name)}</h3><p>@${escapeHTML(user.username)}</p></div></div>${p.bio ? `<p class="profile-bio">${escapeHTML(p.bio)}</p>` : ''}<div class="profile-details">${details || '<p class="profile-empty">No profile details have been added yet.</p>'}</div>${security}`;
+    $('profileBody').innerHTML = `<div class="profile-hero"><button class="profile-avatar-view" type="button" ${user.avatar ? `data-profile-photo="${escapeHTML(user.avatar)}"` : 'disabled'} aria-label="View profile photo">${avatarHTML(user)}</button><div><h3>${escapeHTML(user.name)}</h3><p>@${escapeHTML(user.username)}</p></div></div>${p.bio ? `<p class="profile-bio">${escapeHTML(p.bio)}</p>` : ''}<div class="profile-details">${details || '<p class="profile-empty">No profile details have been added yet.</p>'}</div>${security}`;
+    $('profileBody').querySelector('[data-profile-photo]')?.addEventListener('click', event => { state.fullImageMessage = null; $('fullImage').src = event.currentTarget.dataset.profilePhoto; showDialog('imageDialog'); });
     if (user.id !== state.me.id) {
       $('profileMessage').hidden = false;
       $('profileMessage').onclick = async () => {
@@ -663,22 +919,31 @@ async function loadPeople() {
 }
 $('peopleSearch').oninput = () => { clearTimeout(peopleTimer); peopleTimer = setTimeout(loadPeople, 200); };
 for (const id of ['newChat', 'emptyNewChat', 'welcomeStart', 'railPeople']) $(id).onclick = openPeople;
+$('railPeople').addEventListener('click', () => setRailActive('railPeople'));
+$('peopleDialog').addEventListener('close', () => setRailActive());
 $('inviteButton').onclick = async () => {
   try { await navigator.clipboard.writeText(location.origin); toast('Link copied. Send it to a friend so they can request an account.'); }
   catch { showInfo('Invite a friend', `<p>Share this link with a friend. After registration, the Owner must activate their account.</p><p><a href="${escapeHTML(location.origin)}">${escapeHTML(location.origin)}</a></p><p>If this is a localhost link, it can only be opened on this computer.</p>`); }
 };
 $('themeButton').onclick = () => {
   const settings = appearanceSettings();
-  $('appearanceTheme').value = settings.theme; $('appearanceBackground').value = settings.background;
+  $('appearanceTheme').value = settings.theme; $('appearancePalette').value = settings.palette || 'purple'; $('appearanceBackground').value = settings.background;
   $('appearanceFont').value = settings.font; $('appearanceTextSize').value = settings.textSize || ({ small: 11, normal: 13, large: 17 }[settings.size] || 13);
+  $('appearanceAccent').value = settings.accent || appearanceDefaults.accent; $('appearanceMine').value = settings.mine || appearanceDefaults.mine; $('appearancePeer').value = settings.peer || appearanceDefaults.peer;
   $('appearanceSizeValue').textContent = `${$('appearanceTextSize').value}px`; $('appearanceBold').checked = !!settings.bold; $('appearanceItalic').checked = !!settings.italic;
   showDialog('appearanceDialog');
 };
-for (const id of ['appearanceTheme','appearanceBackground','appearanceFont','appearanceTextSize','appearanceBold','appearanceItalic']) $(id).oninput = () => {
-  const settings = { theme: $('appearanceTheme').value, background: $('appearanceBackground').value, font: $('appearanceFont').value, textSize: Number($('appearanceTextSize').value), bold: $('appearanceBold').checked, italic: $('appearanceItalic').checked };
+for (const id of ['appearanceTheme','appearancePalette','appearanceBackground','appearanceFont','appearanceTextSize','appearanceBold','appearanceItalic','appearanceAccent','appearanceMine','appearancePeer']) $(id).oninput = () => {
+  const settings = { theme: $('appearanceTheme').value, palette: $('appearancePalette').value, background: $('appearanceBackground').value, font: $('appearanceFont').value, textSize: Number($('appearanceTextSize').value), bold: $('appearanceBold').checked, italic: $('appearanceItalic').checked, accent: $('appearanceAccent').value, mine: $('appearanceMine').value, peer: $('appearancePeer').value };
+  if (id === 'appearancePalette' && settings.palette !== 'custom') { const preset = appearancePalettes[settings.palette]; $('appearanceAccent').value = preset.accent; $('appearanceMine').value = preset.mine; $('appearancePeer').value = preset.peer; settings.accent = preset.accent; settings.mine = preset.mine; settings.peer = preset.peer; }
+  if (['appearanceAccent','appearanceMine','appearancePeer'].includes(id)) { settings.palette = 'custom'; $('appearancePalette').value = 'custom'; }
   $('appearanceSizeValue').textContent = `${settings.textSize}px`;
   localStorage.setItem('zbuddy-appearance', JSON.stringify(settings)); applyAppearance(settings);
 };
+$('uploadWallpaper').onclick = () => $('wallpaperInput').click();
+$('wallpaperInput').onchange = async () => { const file = $('wallpaperInput').files[0]; $('wallpaperInput').value = ''; if (!file) return; try { const source = await createImageBitmap(file), scale = Math.min(1, 1920 / Math.max(source.width, source.height)), canvas = document.createElement('canvas'); canvas.width = Math.round(source.width * scale); canvas.height = Math.round(source.height * scale); canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height); source.close?.(); const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error()), 'image/webp', .82)); await wallpaperAsset(blob); const settings = appearanceSettings(); settings.background = 'custom'; localStorage.setItem('zbuddy-appearance', JSON.stringify(settings)); $('appearanceBackground').value = 'custom'; await refreshWallpaper(); applyAppearance(settings); toast('Chat wallpaper updated.'); } catch { toast('The wallpaper could not be prepared.'); } };
+$('removeWallpaper').onclick = async () => { await wallpaperAsset(null).catch(() => {}); const settings = appearanceSettings(); if (settings.background === 'custom') settings.background = 'plain'; localStorage.setItem('zbuddy-appearance', JSON.stringify(settings)); $('appearanceBackground').value = settings.background; await refreshWallpaper(); applyAppearance(settings); toast('Custom wallpaper removed.'); };
+$('appearanceReset').onclick = async () => { localStorage.removeItem('zbuddy-appearance'); await wallpaperAsset(null).catch(() => {}); await refreshWallpaper(); applyAppearance(appearanceDefaults); $('themeButton').click(); toast('Appearance reset.'); };
 function openSavePlace(messageId) {
   const message = state.messages.find(item => item.id === messageId && item.kind === 'location');
   if (!message) return;
@@ -716,10 +981,10 @@ async function loadPlaces() {
     button.disabled = true; try { await api(`/places/${button.dataset.deletePlace}`, { method: 'DELETE' }); await loadPlaces(); } catch (error) { toast(error.message); button.disabled = false; }
   }; });
 }
-$('railPlaces').onclick = () => needAccount(() => { showDialog('placesDialog'); loadPlaces().catch(error => { $('placesList').textContent = error.message; }); });
-$('placesDialog').addEventListener('close', destroyPlaceMaps);
+$('railPlaces').onclick = () => needAccount(() => { setRailActive('railPlaces'); showDialog('placesDialog'); loadPlaces().catch(error => { $('placesList').textContent = error.message; }); });
+$('placesDialog').addEventListener('close', () => { destroyPlaceMaps(); setRailActive(); });
 function showInfo(title, body) { $('infoTitle').textContent = title; $('infoBody').innerHTML = body; showDialog('infoDialog'); }
-$('infoButton').onclick = () => showInfo('About Zbuddy', '<p>A private community for approved members: chat, photos, voice and video calls, and live location.</p><h3>You are in control.</h3><p>Location is shared only with your permission. Stop it at any time. The camera and microphone are used only during calls.</p><h3>Calls &amp; location</h3><p>Use a browser with camera, microphone, and GPS support over HTTPS or localhost. Both people must keep Zbuddy open to receive calls.</p><p>New messages, photos, locations, saved places, and call signals are encrypted on your device before being sent. Compare the safety number in contact information. On a new device, sign in with your email and password to unlock your chat key.</p><p>Stitch &amp; Angel wallpaper by burnss on <a href="https://wallpapers.com/wallpapers/love-stitch-and-angel-900-x-1599-wallpaper-loyrl6n1ouddysi0.html" target="_blank" rel="noopener noreferrer">Wallpapers.com</a>.</p>');
+$('infoButton').onclick = () => showInfo('About Zbuddy', '<p>A private community for approved members: chat, photos, voice and video calls, and live location.</p><h3>Developer</h3><p><strong>Aigeo</strong><br>Freelance Programmer<br>Developed for My Purple</p><h3>You are in control.</h3><p>Location is shared only with your permission. Stop it at any time. The camera and microphone are used only during calls.</p><h3>Calls &amp; location</h3><p>Use a browser with camera, microphone, and GPS support over HTTPS or localhost. Incoming calls on Android use an ongoing notification while active.</p><p>New messages, photos, locations, saved places, and call signals are encrypted on your device before being sent. Compare the safety number in contact information. On a new device, sign in with your email and password to unlock your chat key.</p>');
 function openProfileEditor() {
   const p = state.me.profile || {};
   for (const [id, key] of [['profileBio','bio'],['profileOccupation','occupation'],['profilePhone','phone'],['profileAddress','address'],['profileBirthday','birthday'],['profileTikTok','tiktok'],['profileInstagram','instagram'],['profileFacebook','facebook'],['profileWebsite','website']]) $(id).value = p[key] || '';
@@ -749,10 +1014,18 @@ function showProfile() {
   const u = state.me;
   const available = window.ZbuddyAndroid ? state.config.nativePushConfigured : webPushSupported();
   const notification = available ? `<div class="notification-setting"><div><h3>Message notifications</h3><p>${state.pushEnabled ? 'Enabled on this device.' : 'Receive notifications without revealing message text.'}</p></div><button class="${state.pushEnabled ? 'secondary' : 'primary'}" id="togglePush">${state.pushEnabled ? 'Disable' : 'Enable'}</button></div>` : '<p class="notification-unavailable">Push notifications are not configured for this device yet.</p>';
-  showInfo('Your account', `<div class="profile-photo">${avatarHTML(u)}<div><button class="primary profile-photo-button" id="changeAvatar">Change photo</button>${u.avatar ? '<button class="text-button remove-avatar" id="removeAvatar">Remove photo</button>' : ''}</div></div><h3>${escapeHTML(u.name)}</h3><p>@${escapeHTML(u.username)} · ${u.role === 'owner' ? 'Owner' : 'Member'}</p>${u.email ? `<p class="account-email">${escapeHTML(u.email)}</p>` : ''}<p>Approved friends can find you using this username.</p><button class="secondary profile-action" id="editProfile">Edit profile details</button>${u.role === 'owner' ? '<button class="secondary profile-action" id="manageAccounts">Manage account activation</button>' : ''}${notification}<button class="logout-button" id="logoutButton">${icon('logout')} Sign out</button>`);
+  const serverSettings = window.ZbuddyAndroid?.openServerSettings ? '<button class="secondary profile-action" id="serverSettings">Change server</button>' : '';
+  const appLock = window.ZbuddyAndroid?.configureAppLock ? `<button class="secondary profile-action" id="appLockSettings">App Lock · ${window.ZbuddyAndroid.appLockEnabled?.() ? 'On' : 'Off'}</button>` : '';
+  showInfo('Your account', `<div class="profile-photo"><button class="profile-avatar-view" id="viewOwnAvatar" type="button" ${u.avatar ? '' : 'disabled'} aria-label="View profile photo">${avatarHTML(u)}</button><div><button class="primary profile-photo-button" id="changeAvatar">Change photo</button>${u.avatar ? '<button class="text-button remove-avatar" id="removeAvatar">Remove photo</button>' : ''}</div></div><h3>${escapeHTML(u.name)}</h3><p>@${escapeHTML(u.username)} · ${u.role === 'owner' ? 'Owner' : 'Member'}</p>${u.email ? `<p class="account-email">${escapeHTML(u.email)}</p>` : ''}<p>Approved friends can find you using this username.</p><button class="secondary profile-action" id="editProfile">Edit profile details</button><button class="secondary profile-action" id="appearanceSettings">Chat appearance</button><button class="secondary profile-action" id="soundSettings">Call &amp; notification sounds</button>${appLock}<button class="secondary profile-action" id="aboutSettings">About Zbuddy</button>${serverSettings}${u.role === 'owner' ? '<button class="secondary profile-action" id="manageAccounts">Manage account activation</button>' : ''}${notification}<button class="logout-button" id="logoutButton">${icon('logout')} Sign out</button>`);
   $('changeAvatar').onclick = () => $('avatarInput').click();
-  $('editProfile').onclick = openProfileEditor;
-  if ($('manageAccounts')) $('manageAccounts').onclick = () => { showDialog('accountAdminDialog'); loadAdminUsers().catch(error => { $('accountAdminList').innerHTML = `<p class="form-error">${escapeHTML(error.message)}</p>`; }); };
+  if (u.avatar) $('viewOwnAvatar').onclick = () => { state.fullImageMessage = null; $('fullImage').src = u.avatar; showDialog('imageDialog'); };
+  $('editProfile').onclick = () => { $('infoDialog').close(); openProfileEditor(); };
+  $('appearanceSettings').onclick = () => { $('infoDialog').close(); $('themeButton').click(); };
+  $('soundSettings').onclick = () => { $('infoDialog').close(); openSoundSettings(); };
+  if ($('appLockSettings')) $('appLockSettings').onclick = () => window.ZbuddyAndroid.configureAppLock();
+  $('aboutSettings').onclick = () => { $('infoDialog').close(); $('infoButton').click(); };
+  if ($('serverSettings')) $('serverSettings').onclick = () => { if (confirm('Change server? Any open chat or call will close.')) window.ZbuddyAndroid.openServerSettings(); };
+  if ($('manageAccounts')) $('manageAccounts').onclick = () => { $('infoDialog').close(); showDialog('accountAdminDialog'); loadAdminUsers().catch(error => { $('accountAdminList').innerHTML = `<p class="form-error">${escapeHTML(error.message)}</p>`; }); };
   if ($('togglePush')) $('togglePush').onclick = async () => {
     $('togglePush').disabled = true;
     try { if (state.pushEnabled) await disablePush(); else await enablePush(); showProfile(); toast(state.pushEnabled ? 'Push notifications enabled.' : 'Push notifications disabled.'); }
@@ -771,6 +1044,8 @@ function showProfile() {
   };
 }
 $('profileButton').onclick = () => needAccount(showProfile);
+$('railSettings').onclick = () => needAccount(() => { setRailActive('railSettings'); showProfile(); });
+$('infoDialog').addEventListener('close', () => setRailActive());
 $('avatarInput').onchange = async () => {
   const file = $('avatarInput').files[0]; $('avatarInput').value = ''; if (!file) return;
   const button = $('changeAvatar'); if (button) button.disabled = true;
@@ -790,17 +1065,20 @@ $('messageInput').oninput = () => {
   if (state.active && Date.now() - typingSent > 1300) { typingSent = Date.now(); emit('typing', { conversationId: state.active, active: true }).catch(() => {}); }
 };
 $('messageInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('composer').requestSubmit(); } };
+$('sendButton').onpointerdown = event => event.preventDefault();
 $('composer').onsubmit = async e => {
   e.preventDefault();
   const originalInput = $('messageInput').value, text = originalInput.trim(), id = state.active;
   if ((!text && !state.attachment) || !id || state.sending || state.compressing) return;
-  state.sending = true; $('sendButton').disabled = true; $('messageInput').setAttribute('aria-busy', 'true');
-  const attachment = state.attachment;
+  state.sending = true; bottomPinUntil = Date.now() + 5000; $('sendButton').disabled = true; $('messageInput').setAttribute('aria-busy', 'true');
+  const attachment = state.attachment, reply = state.reply, clientId = crypto.randomUUID();
+  const pending = { id: `pending-${clientId}`, clientId, conversationId: id, senderId: state.me.id, created: Date.now(), pending: true, secure: false, kind: attachment ? 'image' : 'text', body: attachment ? { url: attachment.url, caption: text, reply } : { text, reply } };
+  state.messages.push(pending); appendMessage(pending);
+  $('messageInput').value = ''; resizeInput(); clearReply();
+  if (attachment) { state.attachment = null; attachmentVersion++; $('attachmentPreview').hidden = true; $('attachmentImage').removeAttribute('src'); $('imageInput').value = ''; }
+  focusComposer();
   try {
     await getPeer(id);
-    const retry = state.retry;
-    const clientId = retry?.id === id && retry.text === text && retry.attachment === attachment ? retry.clientId : crypto.randomUUID();
-    state.retry = { id, text, attachment, clientId };
     let payload;
     if (attachment) {
       if (!attachment.uploaded) {
@@ -811,49 +1089,109 @@ $('composer').onsubmit = async e => {
       }
       const a = attachment.uploaded;
       if (a.conversationId !== id || a.clientId !== clientId) throw new Error('Select the image again for this chat.');
-      payload = { kind: 'image', url: a.url, key: a.key, iv: a.iv, caption: text, name: attachment.name, mime: attachment.mime, size: attachment.size, originalSize: attachment.originalSize, width: attachment.width, height: attachment.height };
-    } else payload = { kind: 'text', text };
-    const message = await sendSecure(id, payload, clientId); await onMessage(message); state.retry = null;
+      payload = { kind: 'image', url: a.url, key: a.key, iv: a.iv, caption: text, name: attachment.name, mime: attachment.mime, size: attachment.size, originalSize: attachment.originalSize, width: attachment.width, height: attachment.height, ...(reply ? { reply } : {}) };
+    } else payload = { kind: 'text', text, ...(reply ? { reply } : {}) };
+    const message = await sendSecure(id, payload, clientId);
+    const pendingIndex = state.messages.findIndex(item => item.id === pending.id);
+    const pendingRow = $('messages').querySelector(`[data-message-id="${CSS.escape(pending.id)}"]`);
+    if (pendingIndex !== -1) state.messages[pendingIndex] = message;
+    if (pendingRow) { const wrapper = document.createElement('div'); wrapper.innerHTML = messageHTML(message); const replacement = wrapper.firstElementChild; pendingRow.replaceWith(replacement); bindMessageInteractions(replacement); }
+    await onMessage(message); playTonePattern('pulse');
     if (state.active === id) {
-      if ($('messageInput').value === originalInput) $('messageInput').value = '';
-      if (state.attachment === attachment) clearAttachment();
-      resizeInput(); scrollMessagesToBottom();
+      resizeInput(); pinMessagesToBottom(1800);
     }
     emit('typing', { conversationId: id, active: false }).catch(() => {});
   } catch (err) {
-    if (attachment && /image upload.*expired/i.test(err.message)) { delete attachment.uploaded; state.retry = null; }
-    toast(err.message);
+    const delivered = state.messages.some(item => item.clientId === clientId && !item.pending && item.id !== pending.id);
+    if (delivered) { playTonePattern('pulse'); toast('Message sent.'); }
+    else {
+      pending.pending = false; pending.failed = true; replaceMessageRow(pending);
+      if (!$('messageInput').value) $('messageInput').value = originalInput;
+      if (!state.reply && reply) { state.reply = reply; $('replyName').textContent = reply.senderId === state.me.id ? 'Replying to yourself' : `Replying to ${currentConversation()?.peer.name || 'message'}`; $('replyText').textContent = reply.text; $('replyPreview').hidden = false; }
+      if (!state.attachment && attachment) { state.attachment = attachment; $('attachmentImage').src = attachment.url; $('attachmentName').textContent = attachment.name; $('attachmentPreview').hidden = false; }
+      resizeInput(); toast(err.message);
+    }
   }
-  finally { state.sending = false; $('sendButton').disabled = false; $('messageInput').removeAttribute('aria-busy'); if (state.active === id) focusComposer(); }
+  finally { state.sending = false; $('sendButton').disabled = false; $('messageInput').removeAttribute('aria-busy'); if (attachment && !state.attachment) URL.revokeObjectURL(attachment.url); if (state.active === id) { focusComposer(); pinMessagesToBottom(900); } }
 };
+window.visualViewport?.addEventListener('resize', () => { if (state.active && Date.now() < bottomPinUntil) scrollMessagesToBottom(); });
 $('imageButton').onclick = () => $('imageInput').click();
 let attachmentVersion = 0;
-$('imageInput').onchange = async () => {
-  const file = $('imageInput').files[0]; if (!file) return;
+let cropSource = null, cropFile = null, cropRotation = 0;
+function drawCrop() {
+  if (!cropSource) return;
+  const canvas = $('cropCanvas'), context = canvas.getContext('2d'), size = 720, zoom = Number($('cropZoom').value || 1);
+  canvas.width = size; canvas.height = size; context.clearRect(0, 0, size, size); context.save(); context.translate(size / 2, size / 2); context.rotate(cropRotation * Math.PI / 180);
+  const swapped = Math.abs(cropRotation % 180) === 90, width = swapped ? cropSource.height : cropSource.width, height = swapped ? cropSource.width : cropSource.height;
+  const scale = Math.max(size / width, size / height) * zoom; context.drawImage(cropSource, -cropSource.width * scale / 2, -cropSource.height * scale / 2, cropSource.width * scale, cropSource.height * scale); context.restore();
+}
+async function prepareAttachment(file) {
   clearAttachment(); const version = attachmentVersion;
-  state.compressing = true; $('imageButton').disabled = true; $('sendButton').disabled = true;
-  toast('Compressing the image on your device…');
+  state.compressing = true; $('imageButton').disabled = true; $('sendButton').disabled = true; toast('Compressing the image on your device…');
   try {
-    const result = await compressImage(file);
-    if (version !== attachmentVersion) return;
+    const result = await compressImage(file); if (version !== attachmentVersion) return;
     state.attachment = { ...result, url: URL.createObjectURL(result.blob) };
     $('attachmentImage').src = state.attachment.url; $('attachmentName').textContent = result.name;
     const saved = Math.max(0, Math.round((1 - result.size / result.originalSize) * 100));
     $('compressionInfo').textContent = `${formatBytes(result.originalSize)} → ${formatBytes(result.size)}${saved ? ` · saved ${saved}%` : ''} · ${result.width}×${result.height}${result.still ? ' · GIF converted to a still image' : ''}`;
-    $('attachmentPreview').hidden = false; $('messageInput').focus(); toast('Image ready. It will be encrypted before sending.');
-  } catch (e) { toast(e.message); }
+    $('attachmentPreview').hidden = false; focusComposer(); toast('Image ready. It will be encrypted before sending.');
+  } catch (error) { toast(error.message); }
   finally { state.compressing = false; $('imageButton').disabled = false; $('sendButton').disabled = false; }
+}
+$('imageInput').onchange = async () => {
+  const file = $('imageInput').files[0]; if (!file) return;
+  try { cropSource?.close?.(); cropSource = await createImageBitmap(file); cropFile = file; cropRotation = 0; $('cropZoom').value = '1'; drawCrop(); showDialog('cropDialog'); }
+  catch { await prepareAttachment(file); }
+};
+$('cropZoom').oninput = drawCrop;
+$('rotateCrop').onclick = () => { cropRotation = (cropRotation + 90) % 360; drawCrop(); };
+function cancelCrop() { if ($('cropDialog').open) $('cropDialog').close(); cropSource?.close?.(); cropSource = null; cropFile = null; $('imageInput').value = ''; }
+$('cancelCrop').onclick = cancelCrop;
+$('applyCrop').onclick = async () => {
+  if (!cropSource || !cropFile) return;
+  $('applyCrop').disabled = true;
+  try {
+    const blob = await new Promise((resolve, reject) => $('cropCanvas').toBlob(value => value ? resolve(value) : reject(new Error('The cropped photo could not be prepared.')), 'image/jpeg', .92));
+    const file = new File([blob], cropFile.name.replace(/\.[^.]+$/, '') + '-cropped.jpg', { type: 'image/jpeg' });
+    cancelCrop(); await prepareAttachment(file);
+  } catch (error) { toast(error.message); }
+  finally { $('applyCrop').disabled = false; }
 };
 function clearAttachment() { attachmentVersion++; if (state.attachment) URL.revokeObjectURL(state.attachment.url); state.attachment = null; $('attachmentPreview').hidden = true; $('attachmentImage').removeAttribute('src'); $('imageInput').value = ''; }
 $('removeAttachment').onclick = clearAttachment;
-const emojis = ['😊','😂','❤️','👍','👋','🥰','🎉','🙏','😍','🔥','😎','🤔','😭','✨','💚','👌','🙌','☕','🌻','🥳','💯','🤗','👀','🚀'];
-$('emojiPicker').innerHTML = emojis.map(e => `<button type="button" aria-label="${e}">${e}</button>`).join('');
+const emojiGroups = {
+  Recent: [], Smileys: ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😋','😎','🤓','🧐','🤔','🤭','🤫','😴','🥳','😭','😤','😡'],
+  People: ['👋','🤚','🖐️','✋','👌','🤌','✌️','🤞','🫶','🤟','🤘','👈','👉','👆','👇','👍','👎','👏','🙌','👐','🙏','💪','👀','🫂'],
+  Hearts: ['❤️','🩷','🧡','💛','💚','💙','🩵','💜','🤎','🖤','🤍','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟'],
+  Nature: ['🌸','🌺','🌻','🌹','🌷','🪻','🌿','🍀','🌈','⭐','✨','🔥','🌙','☀️','🌊','🦋','🐱','🐶','🐼','🦄'],
+  Food: ['☕','🍵','🥤','🍰','🎂','🍫','🍓','🍉','🍇','🍕','🍔','🍜','🍣','🍦','🥰','🍽️'],
+  Activity: ['🎉','🎊','🎁','🎈','⚽','🏸','🎮','🎵','🎬','📸','✈️','🚗','🏡','📍','🚀','💯','✅','❌']
+};
+let activeEmojiGroup = 'Smileys';
+function emojiRecent() { try { return JSON.parse(localStorage.getItem('zbuddy-emoji-recent') || '[]').slice(0, 32); } catch { return []; } }
+function renderEmojiPicker() {
+  emojiGroups.Recent = emojiRecent(); if (activeEmojiGroup === 'Recent' && !emojiGroups.Recent.length) activeEmojiGroup = 'Smileys';
+  $('emojiPicker').innerHTML = `<div class="emoji-tabs">${Object.keys(emojiGroups).map(name => `<button type="button" class="${name === activeEmojiGroup ? 'active' : ''}" data-emoji-group="${name}">${name === 'Recent' ? '🕘' : emojiGroups[name][0]}</button>`).join('')}</div><div class="emoji-grid">${emojiGroups[activeEmojiGroup].map(emoji => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join('')}</div>`;
+  $('emojiPicker').querySelectorAll('[data-emoji-group]').forEach(button => button.onclick = () => { activeEmojiGroup = button.dataset.emojiGroup; renderEmojiPicker(); });
+  $('emojiPicker').querySelectorAll('[data-emoji]').forEach(button => button.onclick = () => {
+    const input = $('messageInput'), emoji = button.dataset.emoji; if (input.value.length + emoji.length > 4000) return;
+    input.setRangeText(emoji, input.selectionStart, input.selectionEnd, 'end');
+    localStorage.setItem('zbuddy-emoji-recent', JSON.stringify([emoji, ...emojiRecent().filter(item => item !== emoji)].slice(0, 32))); resizeInput(); focusComposer();
+  });
+}
+renderEmojiPicker();
 $('emojiButton').onclick = () => { $('emojiPicker').hidden = !$('emojiPicker').hidden; };
-$('emojiPicker').querySelectorAll('button').forEach(b => { b.onclick = () => {
-  const t = $('messageInput'); if (t.value.length + b.textContent.length > 4000) return;
-  t.setRangeText(b.textContent, t.selectionStart, t.selectionEnd, 'end'); resizeInput(); t.focus(); $('emojiPicker').hidden = true;
-}; });
 document.addEventListener('click', e => { if (!e.target.closest('#emojiButton, #emojiPicker')) $('emojiPicker').hidden = true; });
+
+$('saveFullImage').onclick = async () => {
+  try {
+    const source = $('fullImage').src, response = await fetch(source), blob = await response.blob(), extension = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg', name = `Zbuddy-${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`;
+    if (window.ZbuddyAndroid?.saveImage) {
+      const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(blob); });
+      window.ZbuddyAndroid.saveImage(data, blob.type || 'image/jpeg', name); toast('Photo saved to Pictures/Zbuddy.');
+    } else { const url = URL.createObjectURL(blob), anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+  } catch (error) { toast('The photo could not be saved.'); }
+};
 
 function geolocationError(err) { return err.code === 1 ? 'Location permission was denied. Enable it in your browser settings.' : err.code === 2 ? 'Your location could not be determined. Make sure GPS is on.' : 'Location took too long. Try again.'; }
 function ensureLocation() {
@@ -861,7 +1199,7 @@ function ensureLocation() {
   if (!navigator.geolocation) throw new Error('This browser does not support location.');
 }
 function getPosition() { return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, e => reject(new Error(geolocationError(e))), { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 })); }
-const coords = p => ({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy });
+const coords = p => ({ latitude: Number(p.coords.latitude), longitude: Number(p.coords.longitude), accuracy: Number.isFinite(p.coords.accuracy) ? Math.max(0, p.coords.accuracy) : null });
 $('locationButton').onclick = () => { if (state.active) showDialog('locationDialog'); };
 $('startLocation').onclick = async () => {
   const id = state.active; if (!id) return;
@@ -869,20 +1207,24 @@ $('startLocation').onclick = async () => {
   try {
     ensureLocation();
     const p = await getPosition();
-    const message = await sendSecure(id, { kind: 'location', ...coords(p), updated: Date.now(), active: true, expires: Date.now() + Number($('locationDuration').value) * 60000 });
+    const duration = Number($('locationDuration').value), message = await sendSecure(id, { kind: 'location', ...coords(p), updated: Date.now(), active: true, expires: Date.now() + duration * 60000, ...(state.reply ? { reply: state.reply } : {}) });
     await prepareStop(message); watchLocation(message); await onMessage(message); $('locationDialog').close(); toast('Live location shared. You can stop it at any time.');
+    clearReply(); try { window.ZbuddyAndroid?.setBackgroundLocationActive?.(true); } catch {}
   } catch (err) { toast(err.message); }
   finally { $('startLocation').disabled = false; }
 };
 function watchLocation(m) {
   if (state.watches.has(m.id)) return;
-  const w = { message: m, pending: null, stopping: false, id: m.id, conversationId: m.conversationId, expires: m.body.expires, lastSent: 0, latest: null, watch: null, timer: null };
+  const w = { message: m, pending: null, stopping: false, id: m.id, conversationId: m.conversationId, expires: m.body.expires, lastSent: 0, lastErrorToast: 0, latest: null, watch: null, timer: null };
   state.watches.set(m.id, w);
   w.watch = navigator.geolocation.watchPosition(p => {
     w.latest = p;
+    w.message = { ...w.message, body: { ...w.message.body, ...coords(p), updated: Date.now() } };
+    const shown = state.messages.find(x => x.id === w.id);
+    if (shown) { shown.body = { ...shown.body, ...w.message.body }; refreshLocationMap(shown); }
     if (Date.now() >= w.expires) { stopLocation(w.id); return; }
     if (Date.now() - w.lastSent >= 5000) updateLocation(w, p);
-  }, err => { toast(geolocationError(err)); stopLocation(w.id); }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  }, err => { if (Date.now() - w.lastErrorToast > 60000) { w.lastErrorToast = Date.now(); toast(geolocationError(err)); } if (err.code === 1) stopLocation(w.id); }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
   w.timer = setTimeout(() => stopLocation(w.id), Math.max(0, w.expires - Date.now()));
   updateLocationBar();
 }
@@ -898,7 +1240,7 @@ async function updateLocation(w, position) {
       w.message = { ...w.message, body: { ...w.message.body, ...coords(position), updated: Date.now() } };
       const envelope = await sealPayload(w.conversationId, w.message.clientId, { kind: 'location', ...w.message.body });
       await emit('message:update', { messageId: w.id, envelope }); await prepareStop(w.message);
-    } catch (e) { if (/not found/i.test(e.message)) removeWatch(w.id); }
+    } catch (e) { w.lastSent = 0; if (/not found/i.test(e.message)) removeWatch(w.id); }
   })();
   try { await w.pending; } finally { w.pending = null; }
 }
@@ -906,7 +1248,7 @@ async function resumeLocation(id) {
   const m = state.messages.find(x => x.id === id); if (!m) return;
   try { ensureLocation(); const p = await getPosition(); await prepareStop(m); watchLocation(m); await updateLocation(state.watches.get(id), p); renderMessages(false); toast('Location updates resumed.'); } catch (e) { toast(e.message); }
 }
-function removeWatch(id) { const w = state.watches.get(id); if (!w) return; navigator.geolocation.clearWatch(w.watch); clearTimeout(w.timer); state.watches.delete(id); updateLocationBar(); }
+function removeWatch(id) { const w = state.watches.get(id); if (!w) return; navigator.geolocation.clearWatch(w.watch); clearTimeout(w.timer); state.watches.delete(id); updateLocationBar(); if (!state.watches.size) try { window.ZbuddyAndroid?.setBackgroundLocationActive?.(false); } catch {} }
 async function stopLocation(id) {
   const w = state.watches.get(id);
   if (w) w.stopping = true;
@@ -929,13 +1271,8 @@ async function stopAllLocations() { await Promise.all([...state.watches.keys()].
 function updateLocationBar() { $('locationBar').hidden = ![...state.watches.values()].some(w => w.conversationId === state.active); }
 $('stopAllLocations').onclick = () => Promise.all([...state.watches.values()].filter(w => w.conversationId === state.active).map(w => stopLocation(w.id)));
 // Browsers may suspend background pages; show the actual timestamp rather than implying continual GPS updates.
-setInterval(() => { if (state.active && state.messages.some(m => m.kind === 'location')) renderMessages(false); }, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && state.active) { markRead().catch(() => {}); refreshConversations().catch(() => {}); } });
-window.addEventListener('pagehide', () => {
-  const updates = [...stoppedEnvelopes.values()];
-  for (const [id, w] of state.watches) { w.stopping = true; removeWatch(id); }
-  if (updates.length) fetch('/api/locations/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates }), keepalive: true }).catch(() => {});
-});
+setInterval(() => { if (state.active && state.messages.some(m => m.kind === 'location')) renderMessages(false); if (combinedLocationEntry) updateCombinedLocationMap(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.active) { markRead().catch(() => {}); refreshConversations().catch(() => {}); for (const w of state.watches.values()) getPosition().then(position => updateLocation(w, position)).catch(() => {}); } });
 
 function mediaError(e) {
   if (e.name === 'NotAllowedError') return 'Camera or microphone permission was denied. Enable it in your browser settings.';
@@ -983,6 +1320,7 @@ function showCall(person, video, incoming) {
   $('remoteVideo').classList.remove('has-video'); $('localVideo').classList.remove('has-video'); $('callNetworkStatus').hidden = true;
   $('localVideoWrap').hidden = !video; updateFullscreenControl();
   showDialog('callDialog');
+  if (incoming) try { window.ZbuddyAndroid?.setCallActive?.(true, true, person.name, video); } catch {}
   if (video && !incoming) enterCallFullscreen();
 }
 function setCallStatus(text) { $('callStatus').textContent = text; }
@@ -995,30 +1333,32 @@ async function startCall(video) {
     await getPeer(c.id);
     const stream = await getMedia(video);
     if (state.call !== call) { stream.getTracks().forEach(t => t.stop()); return; }
-    call.stream = stream; attachLocalStream(call); createPeer(call);
+    call.stream = stream; try { window.ZbuddyAndroid?.setCallActive?.(true, false, c.peer.name, video); } catch {} attachLocalStream(call); createPeer(call);
     const result = await emit('call:start', { conversationId: c.id, video });
     if (state.call !== call) { emit('call:end', { id: result.id }).catch(() => {}); return; }
     call.id = result.id; if (!call.accepted) setCallStatus('Ringing…');
+    if (!call.accepted) startOutgoingRingback();
     call.timeout = setTimeout(() => { if (state.call === call && !call.started) { toast('The call could not connect. Check the network or TURN configuration.'); hangup(); } }, 65000);
   } catch (e) { if (state.call === call) { toast(e.message); cleanupCall(); } }
 }
 function incomingCall(d) {
   if (state.call) { emit('call:end', { id: d.id }).catch(() => {}); return; }
   const call = state.call = { id: d.id, outgoing: false, video: d.video, videoEnabled: d.video, remoteVideoEnabled: d.video, person: d.from, conversationId: d.conversationId, stream: null, pc: null, candidates: [], started: null, timer: null, timeout: null };
-  showCall(d.from, d.video, true); document.title = `${d.from.name} is calling — Zbuddy`;
+  showCall(d.from, d.video, true); startIncomingRingtone(); document.title = `${d.from.name} is calling — Zbuddy`;
   call.timeout = setTimeout(() => { if (state.call === call && !call.pc) cleanupCall('Missed call'); }, 32000);
 }
 $('voiceCall').onclick = () => startCall(false);
 $('videoCall').onclick = () => startCall(true);
 $('acceptCall').onclick = async () => {
   const call = state.call; if (!call || call.outgoing) return;
+  stopCallSound();
   $('acceptCall').disabled = true;
   try {
     if (call.video) enterCallFullscreen();
     await getPeer(call.conversationId);
     const stream = await getMedia(call.video);
     if (state.call !== call) { stream.getTracks().forEach(t => t.stop()); return; }
-    call.stream = stream; attachLocalStream(call); createPeer(call);
+    call.stream = stream; try { window.ZbuddyAndroid?.setCallActive?.(true, false, call.person.name, call.video); } catch {} attachLocalStream(call); createPeer(call);
     await emit('call:accept', { id: call.id });
     if (state.call !== call) return;
     clearTimeout(call.timeout); call.timeout = setTimeout(() => { if (!call.started && state.call === call) { toast('The call connection failed. Check the TURN configuration.'); hangup(); } }, 35000);
@@ -1046,7 +1386,7 @@ function createPeer(call) {
   pc.onconnectionstatechange = () => {
     if (state.call !== call) return;
     if (pc.connectionState === 'connected') {
-      clearTimeout(call.timeout); $('callNetworkStatus').hidden = true;
+      clearTimeout(call.timeout); stopCallSound(); $('callNetworkStatus').hidden = true;
       if (!call.started) {
         call.started = Date.now();
         const tick = () => { const seconds = Math.floor((Date.now() - call.started) / 1000); setCallStatus(`${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`); };
@@ -1090,6 +1430,8 @@ async function handleSignal(signal) {
 async function hangup() { const id = state.call?.id; cleanupCall(); if (id) try { await emit('call:end', { id }); } catch {} }
 function cleanupCall(reason) {
   const call = state.call; if (!call) return;
+  stopCallSound();
+  try { window.ZbuddyAndroid?.setCallActive?.(false, false, '', false); } catch {}
   state.call = null;
   clearInterval(call.timer); clearTimeout(call.timeout);
   if (call.pc) { call.pc.onconnectionstatechange = null; call.pc.onicecandidate = null; call.pc.ontrack = null; call.pc.close(); }

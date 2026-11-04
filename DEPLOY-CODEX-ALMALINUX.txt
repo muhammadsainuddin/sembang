@@ -1,8 +1,8 @@
-Saya mahu deploy backend Zbuddy v1.11.0 pada server AlmaLinux ini.
+Saya mahu deploy backend Zbuddy v1.14.1 pada server AlmaLinux ini.
 
 Fail berikut sepatutnya berada dalam /var/www/private.aigeo.my:
-- zbuddy-nodejs-server-v1.11.0.zip
-- zbuddy-nodejs-server-v1.11.0.zip.sha256
+- zbuddy-nodejs-server-v1.14.1.zip
+- zbuddy-nodejs-server-v1.14.1.zip.sha256
 
 Domain production: private.aigeo.my
 Direktori aplikasi: /var/www/private.aigeo.my/zbuddy-nodejs-server
@@ -23,7 +23,7 @@ Selesaikan deployment ini sampai berfungsi. Ikut syarat berikut:
    Jangan dedahkan port 3000 kepada Internet.
 
 3. Sahkan checksum ZIP sebelum ekstrak:
-   sha256sum -c zbuddy-nodejs-server-v1.11.0.zip.sha256
+   sha256sum -c zbuddy-nodejs-server-v1.14.1.zip.sha256
 
 4. Ekstrak ZIP dalam /var/www/private.aigeo.my.
    Pastikan aplikasi berada di:

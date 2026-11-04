@@ -1,4 +1,4 @@
-# Zbuddy 1.11.0 — VPS AlmaLinux 9 / 10
+# Zbuddy 1.14.1 — VPS AlmaLinux 9 / 10
 
 Pakej ini menjalankan Node.js 24 + SQLite dalam satu container, dengan storan kekal. APK lama kekal serasi. Tiada MySQL/MariaDB diperlukan dan tiada port database perlu dibuka untuk Zbuddy.
 
@@ -50,8 +50,8 @@ Kekalkan SELinux Enforcing. Bind mount Caddyfile/backup menggunakan label `:Z`; 
 Sahkan checksum zip pada komputer asal, upload zip + `.sha256`, kemudian ekstrak ke `/opt/sembang`. Nama folder di dalam zip ialah `zbuddy-nodejs-server`. Jangan mengekstrak di atas pemasangan lama yang belum dibackup.
 
 ```sh
-sha256sum -c zbuddy-nodejs-server-v1.11.0.zip.sha256
-unzip zbuddy-nodejs-server-v1.11.0.zip
+sha256sum -c zbuddy-nodejs-server-v1.14.1.zip.sha256
+unzip zbuddy-nodejs-server-v1.14.1.zip
 sudo mv zbuddy-nodejs-server /opt/sembang
 cd /opt/sembang
 cp .env.example .env

@@ -1,9 +1,11 @@
 # Zbuddy 💜
 
-**APK Android 1.11.0 sudah dibina.** Lihat [panduan Android](ANDROID.md) dan [panduan pelayan Node.js](SERVER.md). Fail release berada di `releases/zbuddy-v1.11.0.apk`.
+Developed by **Aigeo — Freelance Programmer**, for **My Purple**.
+
+**Zbuddy 1.14.1** merangkumi source aplikasi, APK release dan pakej backend. Lihat [panduan Android](ANDROID.md) dan [panduan pelayan Node.js](SERVER.md).
 
 
-Aplikasi chat JavaScript + Node.js untuk komuniti peribadi yang diluluskan Owner: status dihantar/disampaikan/dibaca, Web Push sulit, gambar automatik dimampatkan, panggilan suara/video dan lokasi langsung. Tema lavender lembut dengan latar Stitch & Angel. Antara muka Bahasa Inggeris, responsif untuk telefon dan desktop.
+Aplikasi chat JavaScript + Node.js untuk komuniti peribadi yang diluluskan Owner: tanda dihantar/disampaikan/dibaca, Web Push sulit, gambar automatik dimampatkan, panggilan suara/video dan lokasi langsung. Tema, warna, font dan gambar latar chat boleh dipilih sendiri. Antara muka Bahasa Inggeris, responsif untuk telefon dan desktop.
 
 ## Ikon Zbuddy
 
@@ -27,7 +29,7 @@ Buka **http://localhost:3000**. Jika terminal sudah berada dalam folder `sembang
 4. Akaun sama boleh log masuk serentak pada telefon dan web. Had lalai ialah 50 sesi aktif setiap akaun; sesi tertua dibatalkan apabila had dicapai.
 5. Untuk akaun sama pada pelayar/peranti baharu, log masuk menggunakan emel dan kata laluan. Sandaran kunci chat dibuka secara setempat tanpa kod pemulihan berasingan.
 
-## Backend VPS 1.11.0
+## Backend VPS 1.14.1
 
 Panduan AlmaLinux, proxy/HTTPS, SMTP, kuota, backup dan kemas kini berada dalam [ALMALINUX.md](ALMALINUX.md). Production memerlukan pengesahan emel; kod enam digit dihantar melalui SMTP. Tiga isu audit (bucket proxy, sesi socket tamat, dan storan upload) telah diberikan pembaikan serta regression test. Had E2EE klien yang diterangkan di bawah masih terpakai.
 
@@ -70,11 +72,13 @@ SQLite digunakan untuk akaun, sesi, kunci awam, sejarah dan mesej penerima offli
 
 Chat masa nyata menggunakan Socket.IO, dengan sejarah SQLite, tanda dibaca, belum dibaca, kehadiran, sedang menaip, emoji dan carian kenalan/perbualan. Enter menghantar mesej; Shift+Enter membuat baris baharu.
 
+Tetapan rupa menyediakan Soft Purple, Soft Blue, Soft Green, Soft Grey dan warna tersuai. Gambar sendiri boleh disimpan sebagai wallpaper chat secara setempat pada peranti tanpa dihantar ke pelayan.
+
 Panggilan berdua menyokong jawab/tolak, tamatkan, bisu dan hidup/matikan kamera. Kedua-dua pengguna mesti membuka aplikasi. Ujian automatik isyarat tidak menggantikan ujian kamera/mikrofon sebenar pada dua peranti; ujian tersebut belum dilakukan.
 
-Lokasi langsung boleh dikongsi selama 15 minit, 1 jam atau 8 jam. Halaman perlu terbuka dan aktif; pelayar boleh menjeda GPS di latar belakang. Kad memaparkan peta MapLibre dan cap masa terakhir. Lokasi tempat menarik boleh disimpan dalam ruang **Places**.
+Lokasi langsung boleh dikongsi selama 15 minit, 1 jam, 8 jam atau sehingga dihentikan. Android menjalankan servis foreground sepanjang perkongsian dan menyegarkan lokasi apabila aplikasi kembali aktif; pelayar atau Android masih boleh menjeda GPS apabila aplikasi dihentikan oleh sistem. Kad memaparkan peta MapLibre dan cap masa terakhir, manakala peta bersama boleh menunjukkan kedua-dua pengguna serentak. Lokasi tempat menarik boleh disimpan dalam ruang **Places**.
 
-Butang Henti menghentikan GPS segera dan menghantar kemas kini yang disulitkan. Semasa halaman ditutup, aplikasi cuba menghantar snapshot henti yang telah disulitkan melalui permintaan keepalive. Jika permintaan gagal kerana sambungan terputus, penerima mungkin melihat lokasi terakhir sehingga tamat tempoh. Selepas muat semula, gunakan **Sambung kemas kini lokasi** jika perkongsian belum tamat.
+Butang Henti menghentikan GPS segera dan menghantar kemas kini yang disulitkan. Menutup atau meminimumkan halaman tidak lagi menandakan perkongsian sebagai dihentikan secara automatik. Selepas muat semula, gunakan **Resume location updates** jika perkongsian belum tamat.
 
 ## Telefon / Internet
 

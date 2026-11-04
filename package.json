@@ -1,7 +1,8 @@
 {
   "name": "zbuddy",
-  "version": "1.11.0",
+  "version": "1.14.1",
   "private": true,
+  "author": "Aigeo — Freelance Programmer",
   "description": "Chat, images, voice and video calls, and live location with JavaScript and Node.js",
   "type": "module",
   "engines": {

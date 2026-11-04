@@ -17,7 +17,7 @@ import { mediaStorage, MAX_UPLOAD_BYTES } from './lib/storage.js';
 
 const scrypt = promisify(scryptCallback);
 const root = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = '1.11.0';
+const VERSION = '1.14.1';
 const colors = ['#dacaf0', '#d5c9f2', '#e5c9ed', '#f1cee3', '#cbd6f3', '#e4d1ec'];
 const publicUser = u => ({ id: u.id, name: u.name, username: u.username, color: u.color, avatar: u.avatar ? `/avatars/${u.id}?v=${encodeURIComponent(u.avatar)}` : null, lastSeen: u.last_seen || null });
 const userProfile = u => { try { const value = JSON.parse(u.profile || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } };
@@ -103,12 +103,13 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
       role TEXT NOT NULL DEFAULT 'member', activated INTEGER NOT NULL DEFAULT 0, activated_at INTEGER, activated_by TEXT, profile TEXT NOT NULL DEFAULT '{}');
     CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, a TEXT REFERENCES users(id), b TEXT REFERENCES users(id), created INTEGER NOT NULL, UNIQUE(a,b));
-    CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT REFERENCES conversations(id), sender_id TEXT REFERENCES users(id), kind TEXT NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL, read_at INTEGER, client_id TEXT, delivered_at INTEGER);
+    CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT REFERENCES conversations(id), sender_id TEXT REFERENCES users(id), kind TEXT NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL, read_at INTEGER, client_id TEXT, delivered_at INTEGER, deleted_at INTEGER);
     CREATE UNIQUE INDEX IF NOT EXISTS message_retry ON messages(sender_id,client_id) WHERE client_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS message_history ON messages(conversation_id,created);
     CREATE TABLE IF NOT EXISTS identities (user_id TEXT PRIMARY KEY REFERENCES users(id), public_key TEXT NOT NULL, fingerprint TEXT NOT NULL, backup TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, conversation_id TEXT REFERENCES conversations(id), filename TEXT NOT NULL, mime TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS saved_places (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), creator_id TEXT NOT NULL REFERENCES users(id), body TEXT NOT NULL, client_id TEXT NOT NULL, created INTEGER NOT NULL, UNIQUE(creator_id,client_id));
+    CREATE TABLE IF NOT EXISTS message_hidden (message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(message_id,user_id));
     CREATE INDEX IF NOT EXISTS saved_places_conversation ON saved_places(conversation_id,created);
   `);
   // Additive migration preserves accounts, sessions, keys and chat from older installations.
@@ -128,6 +129,7 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
     db.prepare("UPDATE users SET role='owner',activated=1 WHERE id=?").run(first.id);
   }
   if (!db.prepare('PRAGMA table_info(messages)').all().some(column => column.name === 'delivered_at')) db.exec('ALTER TABLE messages ADD COLUMN delivered_at INTEGER');
+  if (!db.prepare('PRAGMA table_info(messages)').all().some(column => column.name === 'deleted_at')) db.exec('ALTER TABLE messages ADD COLUMN deleted_at INTEGER');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(lower(email)) WHERE email IS NOT NULL');
   for (const [column, definition] of [
     ['owner_id', 'TEXT REFERENCES users(id)'], ['bytes', 'INTEGER NOT NULL DEFAULT 0'],
@@ -197,7 +199,7 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
       next();
     } catch (error) { next(error); }
   });
-  app.use(express.json({ limit: '64kb', strict: true }));
+  app.use(express.json({ limit: '512kb', strict: true }));
   const sessionUser = req => {
     const token = cookieToken(req);
     if (!token) return null;
@@ -265,7 +267,7 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
   }
   const peerId = (c, id) => c.a === id ? c.b : c.a;
   const emitBoth = (c, event, payload) => { emitUser(c.a, event, payload); emitUser(c.b, event, payload); };
-  const decodeMessage = m => ({ id: m.id, conversationId: m.conversation_id, senderId: m.sender_id, kind: m.kind, body: JSON.parse(m.body), created: m.created, deliveredAt: m.delivered_at, readAt: m.read_at, clientId: m.client_id });
+  const decodeMessage = m => ({ id: m.id, conversationId: m.conversation_id, senderId: m.sender_id, kind: m.kind, body: JSON.parse(m.body), created: m.created, deliveredAt: m.delivered_at, readAt: m.read_at, clientId: m.client_id, deletedAt: m.deleted_at || null });
   const sendPushNotification = sendPush || ((subscription, payload) => webpush.sendNotification(subscription, payload, {
     vapidDetails: { subject: settings.vapidSubject, publicKey: vapidKeys.publicKey, privateKey: vapidKeys.privateKey },
     TTL: 86400, urgency: 'high', timeout: 10000,
@@ -742,6 +744,7 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
       const row = db.prepare('SELECT avatar FROM users WHERE id=?').get(req.params.id);
       if (!row?.avatar || path.basename(row.avatar) !== row.avatar) throw fail('Profile photo not found.', 404);
       const ext = path.extname(row.avatar).toLowerCase();
+      res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
       res.type(ext === '.png' ? 'image/png' : ext === '.jpg' ? 'image/jpeg' : 'image/webp').sendFile(path.join(dataDir, 'avatars', row.avatar));
     } catch (error) { next(error); }
   });
@@ -753,8 +756,8 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
     const cs = db.prepare('SELECT * FROM conversations WHERE a=? OR b=?').all(req.user.id, req.user.id);
     res.json(cs.map(c => {
       const peer = db.prepare('SELECT * FROM users WHERE id=?').get(peerId(c, req.user.id));
-      const last = db.prepare('SELECT * FROM messages WHERE conversation_id=? ORDER BY created DESC,rowid DESC LIMIT 1').get(c.id);
-      const unread = db.prepare('SELECT count(*) AS n FROM messages WHERE conversation_id=? AND sender_id!=? AND read_at IS NULL').get(c.id, req.user.id).n;
+      const last = db.prepare('SELECT m.* FROM messages m WHERE m.conversation_id=? AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id=m.id AND h.user_id=?) ORDER BY m.created DESC,m.rowid DESC LIMIT 1').get(c.id, req.user.id);
+      const unread = db.prepare("SELECT count(*) AS n FROM messages m WHERE m.conversation_id=? AND m.sender_id!=? AND m.read_at IS NULL AND m.kind!='deleted' AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id=m.id AND h.user_id=?)").get(c.id, req.user.id, req.user.id).n;
       return { id: c.id, peer: { ...publicUser(peer), online: presence.has(peer.id) }, last: last ? decodeMessage(last) : null, unread, created: c.created };
     }).sort((a, b) => (b.last?.created || b.created) - (a.last?.created || a.created)));
   });
@@ -810,7 +813,7 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
       conversation(req.params.id, req.user.id);
       const before = Number(req.query.before) || Number.MAX_SAFE_INTEGER;
       // A cursor is the last SQLite row id, not a timestamp: equal timestamps never skip messages.
-      const rows = db.prepare('SELECT *,rowid AS cursor FROM messages WHERE conversation_id=? AND rowid<? ORDER BY rowid DESC LIMIT 51').all(req.params.id, before);
+      const rows = db.prepare('SELECT m.*,m.rowid AS cursor FROM messages m WHERE m.conversation_id=? AND m.rowid<? AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id=m.id AND h.user_id=?) ORDER BY m.rowid DESC LIMIT 51').all(req.params.id, before, req.user.id);
       const hasMore = rows.length > 50;
       const page = rows.slice(0, 50).reverse();
       res.json({ messages: page.map(decodeMessage), next: hasMore ? page[0].cursor : null });
@@ -824,6 +827,35 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(root, 'd
       emitBoth(c, 'messages:read', { conversationId: c.id, userId: req.user.id, at });
       res.json({ ok: true });
     } catch (e) { next(e); }
+  });
+  app.delete('/api/messages/:id', auth, (req, res, next) => {
+    try {
+      const row = db.prepare('SELECT * FROM messages WHERE id=?').get(req.params.id);
+      if (!row) throw fail('Message not found.', 404);
+      const c = conversation(row.conversation_id, req.user.id), mode = req.body?.mode;
+      if (mode === 'me') {
+        db.prepare('INSERT OR IGNORE INTO message_hidden (message_id,user_id) VALUES (?,?)').run(row.id, req.user.id);
+        emitUser(req.user.id, 'message:deleted', { id: row.id, conversationId: c.id, mode: 'me' });
+        return res.json({ ok: true });
+      }
+      if (mode !== 'everyone') throw fail('Choose how to delete this message.');
+      if (row.sender_id !== req.user.id) throw fail('Only the sender can delete this message for everyone.', 403);
+      if (row.kind === 'deleted') return res.json({ ok: true });
+      const media = row.client_id ? db.prepare('SELECT * FROM media WHERE owner_id=? AND conversation_id=? AND client_id=?').get(req.user.id, c.id, row.client_id) : null;
+      const deletedAt = Date.now();
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.prepare("UPDATE messages SET kind='deleted',body='{}',deleted_at=?,delivered_at=coalesce(delivered_at,?) WHERE id=?").run(deletedAt, deletedAt, row.id);
+        if (media) db.prepare('DELETE FROM media WHERE id=?').run(media.id);
+        db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+      if (media) {
+        try { unlinkSync(path.join(dataDir, 'uploads', media.filename)); } catch (error) { if (error.code !== 'ENOENT') console.error(JSON.stringify({ event: 'media_delete_error', code: error.code || error.name })); }
+        storage.removed(media.bytes || 0);
+      }
+      emitBoth(c, 'message:deleted', { id: row.id, conversationId: c.id, mode: 'everyone', deletedAt });
+      res.json({ ok: true });
+    } catch (error) { next(error); }
   });
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 0, parts: 1, fieldNameSize: 32 } });
   app.post('/api/conversations/:id/images', auth, (req, res, next) => {

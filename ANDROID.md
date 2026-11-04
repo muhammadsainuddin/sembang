@@ -4,10 +4,10 @@ ID aplikasi/Firebase: `my.aigeo.private`. Namespace kod Java: `my.aigeo.zbuddy` 
 
 Firebase Android disambungkan melalui `android/app/google-services.json`, Google Services plugin 4.5.0 dan Firebase BoM 35.1.0. Cloud Messaging tersedia pada klien dan Android 13+ meminta kebenaran notifikasi ketika aplikasi dibuka.
 
-**APK:** `releases/zbuddy-v1.11.0.apk`.
-**Pelayan:** backend Node.js 1.11.0, pakej `releases/zbuddy-nodejs-server-v1.11.0.zip`. Panduan VPS: [ALMALINUX.md](ALMALINUX.md). APK lama kekal serasi; UI web terkini dimuatkan daripada pelayan.
+**Source Android dan APK release:** 1.14.1, `releases/zbuddy-v1.14.1.apk`.
+**Pelayan:** backend Node.js 1.14.1, pakej `releases/zbuddy-nodejs-server-v1.14.1.zip`. Panduan VPS: [ALMALINUX.md](ALMALINUX.md).
 
-APK menggunakan Android WebView untuk menjalankan antara muka JavaScript daripada pelayan Node.js yang dipilih. Ia menambah pemilihan pelayan, kebenaran kamera/mikrofon/GPS, pemilih gambar Android, butang Back dan pautan peta ke aplikasi luar. Node.js tidak dibenamkan dalam APK; satu pelayan berkongsi diperlukan untuk menghubungkan pengguna.
+APK menggunakan Android WebView untuk menjalankan antara muka JavaScript daripada pelayan Node.js yang dipilih. Ia menambah pemilihan pelayan, kebenaran kamera/mikrofon/GPS, kamera foto/video dan pemilih galeri utama Android, butang Back dan pautan peta ke aplikasi luar. Foto kamera dikecilkan secara native sebelum diserahkan kepada halaman bagi mengurangkan penggunaan memori dan risiko WebView tertutup. Node.js tidak dibenamkan dalam APK; satu pelayan berkongsi diperlukan untuk menghubungkan pengguna.
 
 ## Pasang dan sambung
 
@@ -23,7 +23,7 @@ Untuk ujian USB sahaja:
 ```sh
 npm start
 adb reverse tcp:3000 tcp:3000
-adb install -r releases/zbuddy-v1.11.0.apk
+adb install -r releases/zbuddy-v1.14.1.apk
 ```
 
 Pilih **Uji melalui USB** dalam APK. Jangan gunakan `10.0.2.2` atau IP LAN HTTP untuk menggantikan localhost kerana Web Crypto memerlukan secure context. Untuk penggunaan tanpa USB, hoskan Node.js pada domain HTTPS dengan sijil sah.
@@ -62,7 +62,7 @@ SEMBANG_SERVER_URL=https://private.aigeo.my npm run android:build
 
 ## Had dan ujian
 
-Ini pembungkus Android bagi aplikasi sedia ada, bukan penulisan semula React Native. Ciri chat, E2EE, pemampatan dan panggilan menggunakan JavaScript yang sama. Latar datang daripada pelayan. Aplikasi memerlukan sambungan ke Node.js; tiada chat offline atau push/background calls. Lokasi langsung tidak boleh dijamin semasa aplikasi dijeda Android. TURN mungkin diperlukan untuk panggilan merentas rangkaian.
+Ini aplikasi hybrid: shell, kamera/galeri, notifikasi dan servis foreground menggunakan Android native; chat, E2EE, peta dan panggilan menggunakan WebView/JavaScript yang sama seperti web. Latar datang daripada pelayan. Aplikasi memerlukan sambungan ke Node.js; tiada chat offline. Lokasi langsung tidak boleh dijamin jika Android menghentikan aplikasi. TURN mungkin diperlukan untuk panggilan merentas rangkaian.
 
 Ujian automatik pelayan: `npm test`. Ujian Android: `npm run android:check`. Tandatangan APK diperiksa dengan `apksigner verify`. Pengesahan peranti fizikal dan panggilan suara/video dua peranti perlu dilakukan sebelum penggunaan sebenar.
 

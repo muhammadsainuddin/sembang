@@ -1,6 +1,6 @@
 export function formatBytes(n) { return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`; }
 export async function compressImage(file) {
-  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) throw new Error('Choose a JPG, PNG, WebP, or GIF image.');
+  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif', 'image/avif'].includes(file.type)) throw new Error('Choose a photo from your gallery. JPG, PNG, WebP, GIF, HEIC, HEIF, and AVIF are supported when your device can decode them.');
   if (file.size > 25 * 1024 * 1024) throw new Error('The original image can be at most 25 MB.');
   let image;
   try { image = await createImageBitmap(file); } catch { throw new Error('This file could not be read as an image.'); }
