@@ -13,7 +13,7 @@ import { createIdentity, encryptPayload } from '../public/crypto.js';
 async function setup(t, config = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'sembang-hardening-'));
   const mail = [], sockets = [];
-  const f = { dir, config, instance: null, base: '' };
+  const f = { dir, config: { maxUsers: 100, ...config }, instance: null, base: '' };
   f.start = async () => {
     f.instance = createApp({ dataDir: dir, config: f.config, sendVerification: async message => { mail.push(message); } });
     await new Promise(resolve => f.instance.http.listen(0, '127.0.0.1', resolve));
@@ -21,15 +21,15 @@ async function setup(t, config = {}) {
   };
   await f.start();
   t.after(async () => { sockets.forEach(s => s.disconnect()); await f.instance.close(); rmSync(dir, { recursive: true, force: true }); });
-  f.req = async (route, { body, cookie, headers = {} } = {}) => {
-    const res = await fetch(f.base + route, { method: body === undefined ? 'GET' : 'POST', headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body !== undefined && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...headers }, body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body) });
+  f.req = async (route, { body, cookie, headers = {}, method = body === undefined ? 'GET' : 'POST' } = {}) => {
+    const res = await fetch(f.base + route, { method, headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body !== undefined && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...headers }, body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body) });
     const json = res.headers.get('content-type')?.includes('application/json');
     return { status: res.status, data: json ? await res.json() : await res.arrayBuffer(), cookie: res.headers.get('set-cookie')?.split(';')[0], headers: res.headers };
   };
   f.register = name => f.req('/api/register', { body: { name, email: `${name}@example.com`, password: 'backend-test-password-123' } });
   f.user = async name => {
     const user = await f.register(name); assert.equal(user.status, 201);
-    const identity = await createIdentity();
+    const identity = await createIdentity('backend-test-password-123');
     assert.equal((await f.req('/api/identity', { cookie: user.cookie, body: identity.record })).status, 201);
     return { ...user.data, cookie: user.cookie, identity };
   };
@@ -48,9 +48,67 @@ test('production configuration refuses unsafe origin, cookies, proxy and missing
   assert.throws(() => loadConfig({ TRUST_PROXY: 'true' }), /TRUST_PROXY/);
   const base = { NODE_ENV: 'production', APP_ORIGIN: 'https://chat.example.com', COOKIE_SECURE: 'true', AUTH_SECRET: 'a'.repeat(64), SMTP_HOST: 'smtp.example.com', SMTP_FROM: 'chat@example.com' };
   assert.equal(loadConfig(base).requireEmailVerification, true);
-  assert.throws(() => loadConfig({ ...base, EMAIL_VERIFICATION_REQUIRED: 'false' }), /Pengesahan/);
+  assert.throws(() => loadConfig({ ...base, EMAIL_VERIFICATION_REQUIRED: 'false' }), /Email verification/);
   assert.throws(() => loadConfig({ ...base, SMTP_HOST: '' }), /SMTP/);
   assert.throws(() => loadConfig({ ...base, APP_ORIGIN: 'https://chat.example.com/path' }), /origin/);
+  assert.equal(loadConfig({}).maxUsers, 100);
+  assert.equal(loadConfig({}).maxActiveSessions, 50);
+  assert.equal(loadConfig(base).accountApprovalRequired, true);
+  assert.equal(loadConfig({}).accountApprovalRequired, false);
+});
+
+test('Owner activates verified accounts before they can sign in, while approved profiles remain private to members', async t => {
+  const f = await setup(t, { maxUsers: 5, requireEmailVerification: true, accountApprovalRequired: true });
+  const first = await f.register('owner_one'), second = await f.register('friend_two'), third = await f.register('friend_three');
+  assert.equal(first.status, 202); assert.equal(second.status, 202); assert.equal(third.status, 202);
+  const owner = await f.req('/api/verify-email', { body: { requestId: first.data.requestId, code: f.mail[0].code } });
+  assert.equal(owner.status, 201); assert.equal(owner.data.role, 'owner'); assert.equal(owner.data.activated, true); assert.ok(owner.cookie);
+  const pending = await f.req('/api/verify-email', { body: { requestId: second.data.requestId, code: f.mail[1].code } });
+  assert.equal(pending.status, 202); assert.equal(pending.data.activationRequired, true); assert.equal(pending.cookie, undefined);
+  assert.equal((await f.req('/api/verify-email', { body: { requestId: third.data.requestId, code: f.mail[2].code } })).data.activationRequired, true);
+  assert.equal((await f.req('/api/login', { body: { email: 'friend_two@example.com', password: 'backend-test-password-123' } })).status, 403);
+  const accounts = await f.req('/api/admin/users', { cookie: owner.cookie });
+  assert.equal(accounts.status, 200); assert.equal(accounts.data.length, 3); assert.equal(accounts.data.filter(user => !user.activated).length, 2);
+  const friendId = accounts.data.find(user => user.email === 'friend_two@example.com').id;
+  assert.equal((await f.req(`/api/admin/users/${friendId}/activation`, { cookie: owner.cookie, method: 'PATCH', body: { activated: true } })).status, 200);
+  const login = await f.req('/api/login', { body: { email: 'friend_two@example.com', password: 'backend-test-password-123' } });
+  assert.equal(login.status, 200); assert.ok(login.cookie);
+  assert.equal((await f.req('/api/admin/users', { cookie: login.cookie })).status, 403);
+  const profile = { bio: 'Coffee and maps', occupation: 'Designer', phone: '+60 12-345 6789', address: 'Kuala Lumpur', birthday: '1995-05-12', tiktok: '@friend.two', instagram: 'friend_two', facebook: 'Friend Two', website: 'https://example.com/' };
+  const saved = await f.req('/api/me/profile', { cookie: login.cookie, method: 'PATCH', body: profile });
+  assert.equal(saved.status, 200); assert.equal(saved.data.profile.tiktok, 'friend.two');
+  const viewed = await f.req(`/api/users/${friendId}/profile`, { cookie: owner.cookie });
+  assert.equal(viewed.status, 200); assert.equal(viewed.data.profile.address, 'Kuala Lumpur'); assert.equal('email' in viewed.data, false);
+  assert.equal((await f.req('/api/auth/config')).data.maxUsers, 5);
+  assert.equal((await f.req('/api/auth/config')).data.approvalRequired, true);
+});
+
+test('email password reset replaces credentials and encrypted identity while clearing shared history', async t => {
+  const f = await setup(t);
+  const alice = await f.user('reset_alice'), bob = await f.user('reset_bob');
+  const conversation = await f.req('/api/conversations', { cookie: alice.cookie, body: { userId: bob.id } });
+  assert.equal(conversation.status, 200);
+  f.instance.db.prepare('INSERT INTO messages (id,conversation_id,sender_id,kind,body,created) VALUES (?,?,?,?,?,?)')
+    .run('reset-message', conversation.data.id, alice.id, 'encrypted', '{}', Date.now());
+  f.instance.db.prepare('INSERT INTO push_subscriptions VALUES (?,?,?,?,?)')
+    .run('https://fcm.googleapis.com/fcm/send/reset-test', alice.id, 'p256dh', 'auth', Date.now());
+  const missing = await f.req('/api/password/reset/request', { body: { email: 'missing@example.com' } });
+  assert.equal(missing.status, 202); assert.equal(f.mail.length, 0);
+  const requested = await f.req('/api/password/reset/request', { body: { email: 'reset_alice@example.com' } });
+  assert.equal(requested.status, 202); assert.equal(f.mail[0].purpose, 'reset');
+  const payload = { requestId: requested.data.requestId, code: f.mail[0].code, password: 'brand-new-password-456' };
+  assert.equal((await f.req('/api/password/reset/confirm', { body: payload })).status, 400);
+  assert.equal((await f.req('/api/password/reset/confirm', { body: { ...payload, code: '000000', confirmErase: true } })).status, 400);
+  const confirmed = await f.req('/api/password/reset/confirm', { body: { ...payload, confirmErase: true } });
+  assert.equal(confirmed.status, 200); assert.ok(confirmed.cookie); assert.equal(confirmed.data.id, alice.id);
+  assert.equal((await f.req('/api/me', { cookie: alice.cookie })).status, 401);
+  assert.equal((await f.req('/api/login', { body: { email: 'reset_alice@example.com', password: 'backend-test-password-123' } })).status, 401);
+  assert.equal((await f.req('/api/login', { body: { email: 'reset_alice@example.com', password: 'brand-new-password-456' } })).status, 200);
+  assert.equal(f.instance.db.prepare('SELECT count(*) AS n FROM conversations').get().n, 0);
+  assert.equal(f.instance.db.prepare('SELECT count(*) AS n FROM messages').get().n, 0);
+  assert.equal(f.instance.db.prepare('SELECT count(*) AS n FROM identities WHERE user_id=?').get(alice.id).n, 0);
+  assert.equal(f.instance.db.prepare('SELECT count(*) AS n FROM push_subscriptions WHERE user_id=?').get(alice.id).n, 0);
+  assert.equal((await f.req('/api/me', { cookie: bob.cookie })).status, 200);
 });
 
 test('proxy clients have separate persistent auth buckets; untrusted forwarded headers cannot bypass limits', async t => {
@@ -165,6 +223,7 @@ test('media quota admission, owner/client binding, commit and cleanup preserve r
 test('TURN REST credentials expire and shared secret is not returned', async t => {
   const f = await setup(t,{turnUrls:['turn:turn.example.com:3478'],turnSecret:'test-only-turn-shared-secret'});
   const user=await f.user('turn_user'); const response=await f.req('/api/config',{cookie:user.cookie});
+  assert.equal(response.data.mapStyleUrl, 'https://tiles.openfreemap.org/styles/liberty');
   const turn=response.data.iceServers[1];const expires=Number(turn.username.split(':')[0]);
   assert.ok(expires>Date.now()/1000&&expires<Date.now()/1000+14401);
   assert.equal(turn.credential,createHmac('sha1',f.config.turnSecret).update(turn.username).digest('base64'));
@@ -195,6 +254,7 @@ test('online backup restores committed media and SQLite while excluding only pen
     assert.equal(restored.db.prepare('SELECT id FROM media WHERE id=?').get(pending.data.url.split('/').pop()),undefined);
     const filename=restored.db.prepare('SELECT filename FROM media WHERE id=?').get(mediaId).filename;
     assert.equal(readFileSync(path.join(restoreDir,'uploads',filename)).length,40);
+    assert.deepEqual(JSON.parse(readFileSync(path.join(restoreDir,'push-vapid.json'),'utf8')),JSON.parse(readFileSync(path.join(f.dir,'push-vapid.json'),'utf8')));
     assert.equal(f.instance.db.prepare('SELECT count(*) AS n FROM media').get().n,2);
   } finally {await restored.close();}
 });
@@ -228,11 +288,11 @@ test('Engine.IO rejects HTTP spoofing and foreign origins before allocating prod
   assert.equal((await g.req('/socket.io/?EIO=4&transport=polling',{headers:{...headers,Origin:'https://evil.example'}})).status,400);
 });
 
-test('active sessions are bounded and older cookies are revoked when the limit is reached', async t => {
-  const f=await setup(t);const first=await f.register('session_limit');assert.equal(first.status,201);
+test('web and device sessions work concurrently while the configured safety limit revokes only the oldest', async t => {
+  const f=await setup(t,{maxActiveSessions:3});const first=await f.register('session_limit');assert.equal(first.status,201);
   let last;
-  for(let i=0;i<21;i++){last=await f.req('/api/login',{body:{email:'session_limit@example.com',password:'backend-test-password-123'}});assert.equal(last.status,200);}
-  assert.equal(f.instance.db.prepare('SELECT count(*) AS n FROM sessions WHERE user_id=?').get(first.data.id).n,20);
+  for(let i=0;i<3;i++){last=await f.req('/api/login',{body:{email:'session_limit@example.com',password:'backend-test-password-123'}});assert.equal(last.status,200);}
+  assert.equal(f.instance.db.prepare('SELECT count(*) AS n FROM sessions WHERE user_id=?').get(first.data.id).n,3);
   assert.equal((await f.req('/api/me',{cookie:first.cookie})).status,401);
   assert.equal((await f.req('/api/me',{cookie:last.cookie})).status,200);
 });

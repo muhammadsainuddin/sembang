@@ -1,4 +1,4 @@
-# Add inside an EXISTING HTTPS server block for the Sembang hostname.
+# Add inside an EXISTING HTTPS server block for the SND Chat hostname.
 # Keep your existing certificate configuration. Do not replace unrelated sites.
 location / {
     proxy_pass http://127.0.0.1:3000;

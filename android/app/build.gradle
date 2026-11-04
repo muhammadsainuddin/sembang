@@ -1,17 +1,20 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+    id 'com.google.gms.google-services'
+}
 def signingFile = rootProject.file('.signing/signing.properties')
 def signingValues = new Properties()
 if (signingFile.exists()) signingFile.withInputStream { signingValues.load(it) }
-def serverUrl = providers.gradleProperty('serverUrl').getOrElse('')
+def serverUrl = providers.gradleProperty('serverUrl').getOrElse('https://private.aigeo.my')
 android {
-    namespace 'com.sembang.app'
+    namespace 'my.aigeo.zbuddy'
     compileSdk 36
     defaultConfig {
-        applicationId 'com.sembang.app'
+        applicationId 'my.aigeo.private'
         minSdk 26
         targetSdk 35
-        versionCode 130
-        versionName '1.3.0'
+        versionCode 1110
+        versionName '1.11.0'
         buildConfigField 'String', 'DEFAULT_SERVER', groovy.json.JsonOutput.toJson(serverUrl)
     }
     buildFeatures { buildConfig true }
@@ -34,6 +37,7 @@ android {
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 dependencies {
-    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation platform('com.google.firebase:firebase-bom:35.1.0')
+    implementation 'com.google.firebase:firebase-messaging'
     testImplementation 'junit:junit:4.13.2'
 }

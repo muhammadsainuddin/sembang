@@ -1,0 +1,4 @@
+com.google.firebase.datatransport.BuildConfig
+com.google.firebase.datatransport.LegacyTransportBackend
+com.google.firebase.datatransport.TransportBackend
+com.google.firebase.datatransport.TransportRegistrar

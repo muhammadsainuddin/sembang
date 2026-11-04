@@ -1,0 +1,2 @@
+com.google.firebase.messaging
+string fcm_fallback_notification_channel_label

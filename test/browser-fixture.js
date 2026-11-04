@@ -10,7 +10,7 @@ await new Promise(r => instance.http.listen(3001, '127.0.0.1', r));
 const base = 'http://localhost:3001';
 async function account(name, username) {
   const r = await fetch(`${base}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, username, email: `${username}@example.com`, password: 'ujian-sembang-123' }) });
-  const user = await r.json(), cookie = r.headers.get('set-cookie').split(';')[0], identity = await createIdentity();
+  const user = await r.json(), cookie = r.headers.get('set-cookie').split(';')[0], identity = await createIdentity('ujian-sembang-123');
   await fetch(`${base}/api/identity`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(identity.record) });
   return { user, cookie, identity };
 }
@@ -18,7 +18,7 @@ const aina = await account('Aina (Ujian)', 'aina_qa'), danial = await account('D
 await account('Sara (Ujian)', 'sara_qa');
 const r = await fetch(`${base}/api/conversations`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: aina.cookie }, body: JSON.stringify({ userId: danial.user.id }) });
 const c = await r.json(), now = Date.now();
-const insert = instance.db.prepare('INSERT INTO messages VALUES (?,?,?,?,?,?,?,?)');
+const insert = instance.db.prepare('INSERT INTO messages (id,conversation_id,sender_id,kind,body,created,read_at,client_id) VALUES (?,?,?,?,?,?,?,?)');
 for (const [sender, receiver, text, ago] of [
   [danial, aina, 'Hai Aina! Tema baru ni comel sangat 💜', -240000],
   [aina, danial, 'Kan! Stitch dengan Angel, warna purple soft ✨', -180000],
@@ -31,6 +31,4 @@ for (const [sender, receiver, text, ago] of [
   insert.run(crypto.randomUUID(), c.id, sender.user.id, 'encrypted', JSON.stringify(body), now + ago, now, clientId);
 }
 console.log('Browser QA ready: http://localhost:3001 — aina_qa@example.com / ujian-sembang-123');
-console.log('Aina QA recovery:', aina.identity.recoveryCode);
-console.log('Danial QA recovery:', danial.identity.recoveryCode);
 for (const s of ['SIGINT','SIGTERM']) process.once(s, async () => { await instance.close(); rmSync(dir, { recursive: true, force: true }); process.exit(0); });

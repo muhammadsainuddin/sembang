@@ -1,0 +1,83 @@
+Saya mahu deploy backend Zbuddy v1.11.0 pada server AlmaLinux ini.
+
+Fail berikut sepatutnya berada dalam /var/www/private.aigeo.my:
+- zbuddy-nodejs-server-v1.11.0.zip
+- zbuddy-nodejs-server-v1.11.0.zip.sha256
+
+Domain production: private.aigeo.my
+Direktori aplikasi: /var/www/private.aigeo.my/zbuddy-nodejs-server
+
+Selesaikan deployment ini sampai berfungsi. Ikut syarat berikut:
+
+1. Audit server dahulu:
+   - Semak versi AlmaLinux.
+   - Semak Docker dan Docker Compose.
+   - Semak servis dan proses yang menggunakan port 80, 443 dan 3000.
+   - Kenal pasti Nginx, Apache, Caddy atau panel hosting sedia ada.
+   - Semak firewalld, SELinux dan DNS private.aigeo.my.
+   - Laporkan penemuan sebelum perubahan besar.
+
+2. Jangan hentikan atau padam laman, container, konfigurasi proxy atau servis sedia ada.
+   Jangan matikan SELinux atau firewall.
+   Jangan gunakan docker compose down -v.
+   Jangan dedahkan port 3000 kepada Internet.
+
+3. Sahkan checksum ZIP sebelum ekstrak:
+   sha256sum -c zbuddy-nodejs-server-v1.11.0.zip.sha256
+
+4. Ekstrak ZIP dalam /var/www/private.aigeo.my.
+   Pastikan aplikasi berada di:
+   /var/www/private.aigeo.my/zbuddy-nodejs-server
+
+5. Cipta .env daripada .env.example dengan permission 600.
+   Tetapkan SEMBANG_DOMAIN=private.aigeo.my.
+   Jana AUTH_SECRET selamat menggunakan openssl rand -hex 32 dan tulis terus ke .env tanpa mencetak rahsia dalam chat atau log.
+   Gunakan konfigurasi Gmail berikut:
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=mscreative.my@gmail.com
+   SMTP_FROM='Zbuddy <mscreative.my@gmail.com>'
+   MAX_USERS=100
+   MAX_ACTIVE_SESSIONS=50
+   ACCOUNT_APPROVAL_REQUIRED=true
+   SMTP_PASSWORD mesti menggunakan Google App Password baharu yang dimasukkan terus oleh pengguna pada server.
+   Jangan gunakan semula, paparkan, log atau simpan App Password yang pernah dihantar melalui chat.
+   Jika App Password baharu belum dimasukkan, berhenti pada bahagian itu dan minta pengguna mengedit .env secara terus.
+   Untuk push notification APK, minta pengguna memuat naik Firebase service-account JSON daripada
+   Firebase Console > Project settings > Service accounts. Ini bukan fail google-services.json.
+   Tukarkan JSON itu kepada base64 satu baris dan tetapkan FIREBASE_SERVICE_ACCOUNT_BASE64 dalam .env
+   tanpa mencetak kandungannya dalam chat atau log. Lindungi fail asal dan .env dengan permission 600.
+
+6. Jika port 80/443 sudah digunakan oleh Nginx, Apache atau panel:
+   - Gunakan compose.external-proxy.yaml.
+   - Bind backend hanya pada 127.0.0.1:3000.
+   - Tambah reverse proxy khusus untuk private.aigeo.my.
+   - Sokong WebSocket/Socket.IO.
+   - Kekalkan konfigurasi dan sijil laman lain.
+   - Jangan jalankan deploy/install-almalinux.sh.
+
+7. Jika tiada web server sedia ada dan port 80/443 kosong:
+   - Semak dengan saya sebelum memilih mod Caddy compose.yaml.
+
+8. Jalankan semakan konfigurasi, bina container, jalankan deploy/preflight.mjs dan hidupkan servis dengan docker compose up -d --wait.
+   Gunakan -f compose.external-proxy.yaml apabila berada di belakang proxy sedia ada.
+
+9. Sesuaikan unit systemd backup supaya WorkingDirectory dan ExecStart menggunakan direktori sebenar:
+   /var/www/private.aigeo.my/zbuddy-nodejs-server
+   Jangan biarkan ia menunjuk ke /opt/sembang.
+   Aktifkan timer hanya selepas backup manual berjaya.
+
+10. Sahkan deployment:
+    - docker compose ps
+    - semak log tanpa mendedahkan rahsia
+    - curl /api/health
+    - curl /api/ready
+    - HTTPS private.aigeo.my
+    - WebSocket/Socket.IO melalui reverse proxy
+    - pendaftaran dan penghantaran kod SMTP jika kelayakan tersedia
+    - /api/config melaporkan nativePushConfigured=true selepas Firebase service account dipasang
+    - jalankan satu backup manual dan sahkan checksum backup
+
+11. Jika ada kegagalan, diagnosis dan baiki tanpa memadam data atau mengganggu laman lain.
+    Pada akhir kerja, berikan ringkasan perubahan, fail konfigurasi yang diubah, keputusan ujian, lokasi data Docker, lokasi backup dan arahan rollback.

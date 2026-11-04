@@ -1,0 +1,16 @@
+androidx.datastore.DataStoreDelegateKt
+androidx.datastore.DataStoreDelegateKt$dataStore$1
+androidx.datastore.DataStoreDelegateUtils
+androidx.datastore.DataStoreFile
+androidx.datastore.DataStoreSingletonDelegate
+androidx.datastore.DataStoreSingletonDelegate$getValue$1$1
+androidx.datastore.OkioSerializerWrapper
+androidx.datastore.migrations.SharedPreferencesMigration
+androidx.datastore.migrations.SharedPreferencesMigration$1
+androidx.datastore.migrations.SharedPreferencesMigration$2
+androidx.datastore.migrations.SharedPreferencesMigration$3
+androidx.datastore.migrations.SharedPreferencesMigration$4
+androidx.datastore.migrations.SharedPreferencesMigration$Api24Impl
+androidx.datastore.migrations.SharedPreferencesMigration$shouldMigrate$1
+androidx.datastore.migrations.SharedPreferencesMigration_androidKt
+androidx.datastore.migrations.SharedPreferencesView

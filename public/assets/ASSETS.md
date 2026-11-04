@@ -1,4 +1,4 @@
-# Latar Stitch & Angel
+# Stitch & Angel background
 
 File: `stitch-angel-wallpaper.jpg` (900 × 1599, JPEG, used without altering its pixels).
 
@@ -11,6 +11,6 @@ Two built-in ImageGen attempts were rejected by the image service; no generated 
 > Create a soft pastel lavender chat wallpaper featuring Stitch and Angel as cute small cartoon characters sitting beside one another near the bottom right corner. Sparse lavender hearts, tiny stars and fluffy clouds around the borders. Light pink and muted blue accents, gentle watercolor illustration on a very pale lilac background. Leave a large quiet blank central area for readable chat messages. Wide landscape. No text, no UI, no logos, no watermark.
 
 
-## Kelopak / ikon Sembang — 1.3.0
+## Kelopak / Zbuddy icons
 
-30 ikon SVG dilukis khusus dalam kod projek pada 31 Oktober 2026. Sumber individual di `icons/`, simbol UI di `public/index.html`, dan helaian visual di `icons/collection.svg`. Monogram S turut digunakan untuk favicon dan vector drawable launcher Android. Ini aset vektor projek sendiri; tidak diambil daripada WhatsApp atau pustaka ikon pihak ketiga. Emoji yang ditaip dalam mesej menggunakan emoji sistem biasa.
+The 30 SVG icons were drawn specifically for this project on 31 October 2026. Individual sources are in `icons/`, UI symbols are in `public/index.html`, and the visual reference sheet is at `icons/collection.svg`. The Z monogram is also used for the favicon and Android launcher vector drawable. These are original project vector assets, not copied from WhatsApp or a third-party icon library. Emoji typed in messages use the device's standard system emoji.

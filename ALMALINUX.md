@@ -1,10 +1,10 @@
-# Sembang 1.4.0 — VPS AlmaLinux 9 / 10
+# Zbuddy 1.11.0 — VPS AlmaLinux 9 / 10
 
-Pakej ini menjalankan Node.js 24 + SQLite dalam satu container, dengan storan kekal. APK **1.3.0** sedia ada serasi. Tiada MySQL/MariaDB diperlukan dan tiada port database perlu dibuka untuk Sembang.
+Pakej ini menjalankan Node.js 24 + SQLite dalam satu container, dengan storan kekal. APK lama kekal serasi. Tiada MySQL/MariaDB diperlukan dan tiada port database perlu dibuka untuk Zbuddy.
 
 Pemasangan sebenar VPS masih perlu disahkan mengikut versi OS, port sedia ada, domain dan SMTP. Panduan ini tidak bermaksud sambungan SSH atau deployment ke VPS telah berjaya.
 
-## Domain Sembang
+## Domain Zbuddy
 
 Domain pilihan ialah **https://private.aigeo.my**. `.env.example` sudah menetapkan `SEMBANG_DOMAIN=private.aigeo.my`; Compose menggunakan nilai yang sama untuk HTTPS, Origin API/WebSocket dan kuki selamat.
 
@@ -47,12 +47,12 @@ Kekalkan SELinux Enforcing. Bind mount Caddyfile/backup menggunakan label `:Z`; 
 
 ## 2. Upload pakej dan isi konfigurasi
 
-Sahkan checksum zip pada komputer asal, upload zip + `.sha256`, kemudian ekstrak ke `/opt/sembang`. Nama folder di dalam zip ialah `sembang-nodejs-server`. Jangan mengekstrak di atas pemasangan lama yang belum dibackup.
+Sahkan checksum zip pada komputer asal, upload zip + `.sha256`, kemudian ekstrak ke `/opt/sembang`. Nama folder di dalam zip ialah `zbuddy-nodejs-server`. Jangan mengekstrak di atas pemasangan lama yang belum dibackup.
 
 ```sh
-sha256sum -c sembang-nodejs-server-v1.4.0.zip.sha256
-unzip sembang-nodejs-server-v1.4.0.zip
-sudo mv sembang-nodejs-server /opt/sembang
+sha256sum -c zbuddy-nodejs-server-v1.11.0.zip.sha256
+unzip zbuddy-nodejs-server-v1.11.0.zip
+sudo mv zbuddy-nodejs-server /opt/sembang
 cd /opt/sembang
 cp .env.example .env
 chmod 600 .env
@@ -69,8 +69,15 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=akaun_smtp_kamu
 SMTP_PASSWORD='kata_laluan_smtp_kamu'
-SMTP_FROM='Sembang <chat@domain-kamu.com>'
+SMTP_FROM='Zbuddy <chat@domain-kamu.com>'
+# Pilihan untuk push native Android; hasil satu baris daripada service-account JSON Firebase.
+FIREBASE_SERVICE_ACCOUNT_BASE64=
+MAX_USERS=100
+MAX_ACTIVE_SESSIONS=50
+ACCOUNT_APPROVAL_REQUIRED=true
 ```
+
+Untuk notifikasi ketika APK ditutup, muat turun **service-account JSON** daripada Firebase Console → Project settings → Service accounts. Ini berbeza daripada `google-services.json`. Jana nilai satu baris dengan `base64 -w0 firebase-service-account.json`, tampal hanya nilainya ke `FIREBASE_SERVICE_ACCOUNT_BASE64`, kemudian padam fail sementara secara selamat. Jangan masukkan service-account ke ZIP, Git atau folder `public/`.
 
 Nilai contoh mesti diganti. Jika kata laluan mengandungi `$`, petik dengan single quote dalam `.env` supaya Compose tidak melakukan interpolation. Jangan letakkan `.env`, kunci SSH atau kunci tandatangan APK dalam folder `public/`.
 
@@ -106,7 +113,7 @@ docker compose -f compose.external-proxy.yaml up -d --wait
 printf '%s\n' compose.external-proxy.yaml > deploy/compose-mode
 ```
 
-Aplikasi diterbitkan hanya pada `127.0.0.1:3000`. Tambah reverse proxy pada vhost HTTPS domain Sembang sahaja. Contoh Nginx: `deploy/nginx-sembang.conf.example`. Proxy perlu menyokong WebSocket dan menulis semula `X-Forwarded-For` kepada IP klien yang dipercayai serta `X-Forwarded-Proto` kepada `https`. Untuk Apache/panel, sesuaikan melalui konfigurasi panel sebenar; jangan menggantikan vhost laman lain.
+Aplikasi diterbitkan hanya pada `127.0.0.1:3000`. Tambah reverse proxy pada vhost HTTPS domain Zbuddy sahaja. Contoh Nginx: `deploy/nginx-sembang.conf.example`. Proxy perlu menyokong WebSocket dan menulis semula `X-Forwarded-For` kepada IP klien yang dipercayai serta `X-Forwarded-Proto` kepada `https`. Untuk Apache/panel, sesuaikan melalui konfigurasi panel sebenar; jangan menggantikan vhost laman lain.
 
 Host proxy dilihat oleh container sebagai gateway `172.29.241.1`; `PROXY_GATEWAY` dan subnet boleh diubah bersama jika perlu. Jangan menukar TRUST_PROXY menjadi `true`, mempercayai semua IP, atau membuka Node 3000 pada semua interface. Jika Nginx/Apache di bawah SELinux menolak sambungan ke backend, semak rekod AVC dan polisi host dahulu; jangan matikan SELinux.
 
@@ -114,7 +121,7 @@ Bagi host di belakang Cloudflare/load balancer, konfigurasi pemulihan IP asal pa
 
 ## 4. Backup harian dan pemulihan
 
-Backup mengambil snapshot SQLite yang konsisten sambil aplikasi berjalan, kemudian menyertakan semua fail media **committed** dalam snapshot itu. Fail committed kekal immutable. Upload pending tidak disalin atau dipadam daripada data sebenar; ia hanya dikecualikan daripada salinan backup. Chat/kunci/sesi dan sandaran kunci sulit dimasukkan; private key peranti serta kod pemulihan pengguna tidak berada pada pelayan.
+Backup mengambil snapshot SQLite yang konsisten sambil aplikasi berjalan, kemudian menyertakan semua fail media **committed** dalam snapshot itu. Fail committed kekal immutable. Upload pending tidak disalin atau dipadam daripada data sebenar; ia hanya dikecualikan daripada salinan backup. Chat/kunci/sesi dan sandaran kunci sulit dimasukkan; private key plaintext dan kata laluan pengguna tidak disimpan dalam backup.
 
 ```sh
 cd /opt/sembang

@@ -1,5 +1,5 @@
 [Unit]
-Description=Sembang consistent SQLite and encrypted media backup
+Description=SND Chat consistent SQLite and encrypted media backup
 Requires=docker.service
 After=docker.service
 

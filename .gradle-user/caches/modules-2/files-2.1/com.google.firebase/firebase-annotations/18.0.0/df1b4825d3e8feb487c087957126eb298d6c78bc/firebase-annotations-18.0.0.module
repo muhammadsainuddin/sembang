@@ -1,0 +1,89 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.google.firebase",
+    "module": "firebase-annotations",
+    "version": "18.0.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14.5"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "firebase-annotations-18.0.0.jar",
+          "url": "firebase-annotations-18.0.0.jar",
+          "size": 4589,
+          "sha512": "d11acc9a0347cd2a60eafb06c50cbbf77b6730bdd4381c0f3262e59fc5e826235e0048dd3a79c19d4c0abfe58513e03777d110f3026d42f72fc83304f3657fe8",
+          "sha256": "cdb20e14f4f77463f6bb6d339cf95efe132a4196eb9592bf3c4dc83856e2670d",
+          "sha1": "85d6dcad57d6a54b2c309135c0ccf751f4afa8a8",
+          "md5": "0fa5e291afb7480bd119bf923526c56a"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "javax.inject",
+          "module": "javax.inject",
+          "version": {
+            "requires": "1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "firebase-annotations-18.0.0.jar",
+          "url": "firebase-annotations-18.0.0.jar",
+          "size": 4589,
+          "sha512": "d11acc9a0347cd2a60eafb06c50cbbf77b6730bdd4381c0f3262e59fc5e826235e0048dd3a79c19d4c0abfe58513e03777d110f3026d42f72fc83304f3657fe8",
+          "sha256": "cdb20e14f4f77463f6bb6d339cf95efe132a4196eb9592bf3c4dc83856e2670d",
+          "sha1": "85d6dcad57d6a54b2c309135c0ccf751f4afa8a8",
+          "md5": "0fa5e291afb7480bd119bf923526c56a"
+        }
+      ]
+    }
+  ]
+}

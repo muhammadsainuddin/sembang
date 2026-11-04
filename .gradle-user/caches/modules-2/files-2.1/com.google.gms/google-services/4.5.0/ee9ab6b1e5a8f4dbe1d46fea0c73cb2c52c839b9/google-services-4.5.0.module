@@ -1,0 +1,136 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.google.gms",
+    "module": "google-services",
+    "version": "4.5.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.0.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 11,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-jdk8",
+          "version": {
+            "requires": "1.7.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "google-services-4.5.0.jar",
+          "url": "google-services-4.5.0.jar",
+          "size": 42893,
+          "sha512": "d3825b3c553e7cb159244396fd542548e81ca352e99670ecb78df41fd3c5c4fdf9be35aba2682890b07dc78eb19fe365fca48aa9df68dadb40425a66abf44107",
+          "sha256": "cb92b1a3323d1b6a86ca4da1fa1302043e88fb3d50b7c105d237696d8a246cc0",
+          "sha1": "ff0b3b2cd677a6d87db9552bc48d058e32538ae7",
+          "md5": "0847c39f47e21bbe648a7cac5d955dd1"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 11,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "com.google.android.gms",
+          "module": "strict-version-matcher-plugin",
+          "version": {
+            "requires": "1.2.4"
+          }
+        },
+        {
+          "group": "com.google.code.gson",
+          "module": "gson",
+          "version": {
+            "requires": "2.8.5"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-jdk8",
+          "version": {
+            "requires": "1.7.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "google-services-4.5.0.jar",
+          "url": "google-services-4.5.0.jar",
+          "size": 42893,
+          "sha512": "d3825b3c553e7cb159244396fd542548e81ca352e99670ecb78df41fd3c5c4fdf9be35aba2682890b07dc78eb19fe365fca48aa9df68dadb40425a66abf44107",
+          "sha256": "cb92b1a3323d1b6a86ca4da1fa1302043e88fb3d50b7c105d237696d8a246cc0",
+          "sha1": "ff0b3b2cd677a6d87db9552bc48d058e32538ae7",
+          "md5": "0847c39f47e21bbe648a7cac5d955dd1"
+        }
+      ]
+    },
+    {
+      "name": "javadocElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "google-services-4.5.0-javadoc.jar",
+          "url": "google-services-4.5.0-javadoc.jar",
+          "size": 261,
+          "sha512": "1487e5a20c9e4d74f298e07c42e96a61be11b7a768c3fbc199ee138cd68e1fc2267d1cfe3f11f288acc05df755315344d052cc5f6f751f126ab4fe1caa5125ea",
+          "sha256": "c6deada2fac53b8ea6523dbda77597b128006674616f140f04df23264c6d1aa3",
+          "sha1": "2ad14aed781c4a73ed4dbb421966d408a0a06686",
+          "md5": "f43436d6bec321290f6af228ad602604"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "google-services-4.5.0-sources.jar",
+          "url": "google-services-4.5.0-sources.jar",
+          "size": 7024,
+          "sha512": "49b9ce4ba4d9231f8f6f813a67f0661f1cf91b37220cbb94c706c2adb5fca8f1413bbd941e769ad5015c1c5a8ce5c08ecfce27ce0cbc838c2e2c827b18ca2254",
+          "sha256": "60f4cc6831122de752f8c506edf9fd9085539a2922d1b4bbb4c70add4b60c0c5",
+          "sha1": "ff2ea100520153b58b7660929bc130f84fc7ec7d",
+          "md5": "b23f9d6a52de7fb21b7179b1b5c73945"
+        }
+      ]
+    }
+  ]
+}

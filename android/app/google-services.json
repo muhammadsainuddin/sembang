@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "384688635584",
+    "project_id": "zbuddy",
+    "storage_bucket": "zbuddy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:384688635584:android:b7a120ea52bb18e344b725",
+        "android_client_info": {
+          "package_name": "my.aigeo.private"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6zgGlpOsIEded7HOqTMLm8LNGZzvGdBE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

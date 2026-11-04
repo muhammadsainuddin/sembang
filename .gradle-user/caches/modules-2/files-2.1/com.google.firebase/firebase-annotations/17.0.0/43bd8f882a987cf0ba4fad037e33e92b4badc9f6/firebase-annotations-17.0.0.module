@@ -1,0 +1,69 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.google.firebase",
+    "module": "firebase-annotations",
+    "version": "17.0.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.13"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "files": [
+        {
+          "name": "firebase-annotations-17.0.0.jar",
+          "url": "firebase-annotations-17.0.0.jar",
+          "size": 3517,
+          "sha512": "7e734bafa18f95b2705b9ce61dfc58a00382d8ed91c61cf479ccb617b9f0a1d543688b017d66e5e002ff156bf4e9ce2d69c5da0c7bb2e34b5b57168f9d7f1818",
+          "sha256": "f80305e6f7b5d111278d4df9504f51f7230e06c6457a0fa7c16e236c7613cc71",
+          "sha1": "fd04a6accd970e0fcf9baf2424abe2926e00d0e2",
+          "md5": "d54ccb56b5502eb1339295df2d7feb89"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "javax.inject",
+          "module": "javax.inject",
+          "version": {
+            "requires": "1"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "firebase-annotations-17.0.0.jar",
+          "url": "firebase-annotations-17.0.0.jar",
+          "size": 3517,
+          "sha512": "7e734bafa18f95b2705b9ce61dfc58a00382d8ed91c61cf479ccb617b9f0a1d543688b017d66e5e002ff156bf4e9ce2d69c5da0c7bb2e34b5b57168f9d7f1818",
+          "sha256": "f80305e6f7b5d111278d4df9504f51f7230e06c6457a0fa7c16e236c7613cc71",
+          "sha1": "fd04a6accd970e0fcf9baf2424abe2926e00d0e2",
+          "md5": "d54ccb56b5502eb1339295df2d7feb89"
+        }
+      ]
+    }
+  ]
+}

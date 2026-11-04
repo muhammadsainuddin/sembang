@@ -2,7 +2,7 @@ name: sembang
 services:
   sembang:
     build: .
-    image: sembang-node:1.4.0
+    image: sembang-node:1.11.0
     restart: unless-stopped
     init: true
     read_only: true

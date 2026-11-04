@@ -1,0 +1,164 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "org.jetbrains.kotlinx",
+    "module": "kotlinx-coroutines-play-services",
+    "version": "1.10.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.13"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-bom",
+          "version": {
+            "requires": "1.10.2"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "com.google.android.gms",
+          "module": "play-services-tasks",
+          "version": {
+            "requires": "16.0.1"
+          },
+          "excludes": [
+            {
+              "group": "com.android.support",
+              "module": "*"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kotlinx-coroutines-play-services-1.10.2.jar",
+          "url": "kotlinx-coroutines-play-services-1.10.2.jar",
+          "size": 10686,
+          "sha512": "b1571d99c0fa64cac18236bbea4a3b34bdfb02327a07ca59c68d850ed4a25f66d0fd2ec8d155724ad88995992b10c03ddf70d7dad74fd30bc86a40d52bf5fbdd",
+          "sha256": "a84469d683cffc4427270b7144c62047d2a71ece703e063a4880c8dcc42caf72",
+          "sha1": "61cc2b7de54f902c76fb2e3649bb1cd890a4a1cc",
+          "md5": "ced635266069a772421a03d9848a7bb9"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-bom",
+          "version": {
+            "requires": "1.10.2"
+          },
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "com.google.android.gms",
+          "module": "play-services-tasks",
+          "version": {
+            "requires": "16.0.1"
+          },
+          "excludes": [
+            {
+              "group": "com.android.support",
+              "module": "*"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kotlinx-coroutines-play-services-1.10.2.jar",
+          "url": "kotlinx-coroutines-play-services-1.10.2.jar",
+          "size": 10686,
+          "sha512": "b1571d99c0fa64cac18236bbea4a3b34bdfb02327a07ca59c68d850ed4a25f66d0fd2ec8d155724ad88995992b10c03ddf70d7dad74fd30bc86a40d52bf5fbdd",
+          "sha256": "a84469d683cffc4427270b7144c62047d2a71ece703e063a4880c8dcc42caf72",
+          "sha1": "61cc2b7de54f902c76fb2e3649bb1cd890a4a1cc",
+          "md5": "ced635266069a772421a03d9848a7bb9"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kotlinx-coroutines-play-services-1.10.2-sources.jar",
+          "url": "kotlinx-coroutines-play-services-1.10.2-sources.jar",
+          "size": 1868,
+          "sha512": "43b85f03f154e5e6639630ef44a3c3ee7525501b6db370e58e3be1d9257c514a617296ab496db212f8c137c7697415b6f28d65172dafe744741d70f66823b17a",
+          "sha256": "84f8056cc15081ff4894456dd6ca9c69fafb3edd40826b13b186b7ed86c08be9",
+          "sha1": "16a35a3b4266c6286a005ccf3bca6fade78e94b2",
+          "md5": "9e16cd0875453acd29dddccdc65edcb3"
+        }
+      ]
+    }
+  ]
+}

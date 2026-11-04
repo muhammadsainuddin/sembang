@@ -24,7 +24,7 @@ async function fixture(run) {
     async function register(name) {
       const signup = await request('/api/register', { body: { name, email: `${name}@example.invalid`, password: 'local-audit-password-123' } });
       assert.equal(signup.status, 201);
-      const identity = await createIdentity();
+      const identity = await createIdentity('local-audit-password-123');
       assert.equal((await request('/api/identity', { cookie: signup.cookie, body: identity.record })).status, 201);
       return { ...signup.data, cookie: signup.cookie, identity };
     }

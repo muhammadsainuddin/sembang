@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily Sembang backup
+Description=Daily SND Chat backup
 
 [Timer]
 OnCalendar=*-*-* 03:15:00 Asia/Kuala_Lumpur

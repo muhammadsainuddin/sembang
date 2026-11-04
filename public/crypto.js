@@ -1,6 +1,7 @@
-// Web Crypto only. Private keys and recovery secrets never leave the client in plaintext.
+// Web Crypto only. Private keys never leave the client in plaintext.
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+const VAULT_ITERATIONS = 600000;
 export const toB64 = value => {
   const bytes = new Uint8Array(value); let out = '';
   for (let i = 0; i < bytes.length; i += 8192) out += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -12,6 +13,11 @@ export async function fingerprint(publicKey) {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(JSON.stringify(publicPart(publicKey)))))].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 async function aes(raw, usages) { return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, usages); }
+async function passwordVaultKey(password, salt, iterations, usages) {
+  if (typeof password !== 'string' || password.length < 1 || password.length > 128) throw new Error('A password is required to unlock chat.');
+  const material = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, material, { name: 'AES-GCM', length: 256 }, false, usages);
+}
 export async function sealBytes(key, bytes, context) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(context), tagLength: 128 }, key, bytes);
@@ -20,29 +26,30 @@ export async function sealBytes(key, bytes, context) {
 export async function openBytes(key, iv, data, context) {
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(iv), additionalData: enc.encode(context), tagLength: 128 }, key, data);
 }
-export async function createIdentity() {
+export async function createIdentity(password) {
   const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const jwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
   const publicKey = publicPart(jwk), id = await fingerprint(publicKey);
-  const secret = crypto.getRandomValues(new Uint8Array(32));
-  const recoveryCode = toB64(secret).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const backup = await sealBytes(await aes(secret, ['encrypt']), enc.encode(JSON.stringify(jwk)), `Sembang/v1/vault|${id}`);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const backup = await sealBytes(await passwordVaultKey(password, salt, VAULT_ITERATIONS, ['encrypt']), enc.encode(JSON.stringify(jwk)), `Sembang/v2/vault|${id}`);
   const privateKey = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-  return { privateKey, record: { publicKey, fingerprint: id, backup: { iv: backup.iv, data: toB64(backup.data) } }, recoveryCode };
+  return { privateKey, record: { publicKey, fingerprint: id, backup: { v: 2, kdf: 'PBKDF2-SHA-256', iterations: VAULT_ITERATIONS, salt: toB64(salt), iv: backup.iv, data: toB64(backup.data) } } };
 }
-export async function recoverIdentity(record, code) {
+export async function recoverIdentity(record, password) {
   try {
-    if (!/^[A-Za-z0-9_-]{43}$/.test(code.trim())) throw new Error();
-    const secret = fromB64(code.trim().replace(/-/g, '+').replace(/_/g, '/') + '=');
-    const plain = await openBytes(await aes(secret, ['decrypt']), record.backup.iv, fromB64(record.backup.data), `Sembang/v1/vault|${record.fingerprint}`);
+    const backup = record?.backup;
+    if (backup?.v !== 2 || backup.kdf !== 'PBKDF2-SHA-256' || backup.iterations !== VAULT_ITERATIONS) throw new Error();
+    const salt = fromB64(backup.salt);
+    if (salt.length !== 16) throw new Error();
+    const plain = await openBytes(await passwordVaultKey(password, salt, backup.iterations, ['decrypt']), backup.iv, fromB64(backup.data), `Sembang/v2/vault|${record.fingerprint}`);
     const jwk = JSON.parse(dec.decode(plain));
     if (await fingerprint(jwk) !== record.fingerprint || await fingerprint(record.publicKey) !== record.fingerprint) throw new Error();
     const privateKey = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
     return { privateKey, record };
-  } catch { throw new Error('Kod pemulihan tidak sepadan. Semak kod 43 aksara untuk akaun ini.'); }
+  } catch { throw new Error('The chat key could not be unlocked. Sign in again with the correct account password.'); }
 }
 export async function conversationKey(identity, peer, conversationId, senderKey, recipientKey) {
-  if (await fingerprint(peer.publicKey) !== peer.fingerprint) throw new Error('Kunci kenalan tidak sah.');
+  if (await fingerprint(peer.publicKey) !== peer.fingerprint) throw new Error('The contact key is invalid.');
   const remote = await crypto.subtle.importKey('jwk', publicPart(peer.publicKey), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const shared = await crypto.subtle.deriveBits({ name: 'ECDH', public: remote }, identity.privateKey, 256);
   const material = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
@@ -58,7 +65,7 @@ export async function encryptPayload(identity, peer, conversationId, senderId, c
 export async function decryptPayload(identity, peer, message, myId) {
   const b = message.body;
   const own = message.senderId === myId;
-  if (b.v !== 1 || b.senderKey !== (own ? identity.record.fingerprint : peer.fingerprint) || b.recipientKey !== (own ? peer.fingerprint : identity.record.fingerprint)) throw new Error('Kunci mesej tidak sepadan.');
+  if (b.v !== 1 || b.senderKey !== (own ? identity.record.fingerprint : peer.fingerprint) || b.recipientKey !== (own ? peer.fingerprint : identity.record.fingerprint)) throw new Error('The message keys do not match.');
   const key = await conversationKey(identity, peer, message.conversationId, b.senderKey, b.recipientKey);
   const data = await openBytes(key, b.iv, fromB64(b.data), aad(message.conversationId, message.senderId, message.clientId, b));
   return JSON.parse(dec.decode(data));

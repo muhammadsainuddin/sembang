@@ -1,6 +1,8 @@
 node_modules
 .git
 .env
+*firebase-adminsdk*.json
+*service-account*.json
 data
 android
 releases

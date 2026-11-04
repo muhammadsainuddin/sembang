@@ -1,0 +1,13 @@
+{
+  "name": "Zbuddy",
+  "short_name": "Zbuddy",
+  "description": "Private chat, calls, and live location.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf7fc",
+  "theme_color": "#8a65af",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

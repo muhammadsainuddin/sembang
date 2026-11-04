@@ -1,0 +1,17 @@
+com.google.android.datatransport.AutoValue_Event
+com.google.android.datatransport.AutoValue_EventContext
+com.google.android.datatransport.AutoValue_EventContext$1
+com.google.android.datatransport.AutoValue_EventContext$Builder
+com.google.android.datatransport.AutoValue_ProductData
+com.google.android.datatransport.BuildConfig
+com.google.android.datatransport.Encoding
+com.google.android.datatransport.Event
+com.google.android.datatransport.EventContext
+com.google.android.datatransport.EventContext$Builder
+com.google.android.datatransport.Priority
+com.google.android.datatransport.ProductData
+com.google.android.datatransport.PseudonymousIdUpdateReceiver
+com.google.android.datatransport.Transformer
+com.google.android.datatransport.Transport
+com.google.android.datatransport.TransportFactory
+com.google.android.datatransport.TransportScheduleCallback

@@ -1,32 +1,36 @@
-# Sembang Android (.apk)
+# Zbuddy Android (.apk)
 
-**APK:** `releases/sembang-v1.3.0.apk`
-**Pelayan:** backend Node.js 1.4.0, pakej `releases/sembang-nodejs-server-v1.4.0.zip`. Panduan VPS: [ALMALINUX.md](ALMALINUX.md). APK 1.3.0 kekal serasi; borang kod emel production dimuatkan daripada pelayan.
+ID aplikasi/Firebase: `my.aigeo.private`. Namespace kod Java: `my.aigeo.zbuddy` kerana `private` ialah kata kunci Java dan tidak sah sebagai segmen package source.
 
-APK menggunakan Android WebView untuk menjalankan antara muka JavaScript daripada pelayan Node.js yang dipilih. Ia menambah pemilihan pelayan, kebenaran kamera/mikrofon/GPS, pemilih gambar Android, butang Back, pautan peta ke aplikasi luar serta simpan/salin kod pemulihan melalui Android. Node.js tidak dibenamkan dalam APK; satu pelayan berkongsi diperlukan untuk menghubungkan pengguna.
+Firebase Android disambungkan melalui `android/app/google-services.json`, Google Services plugin 4.5.0 dan Firebase BoM 35.1.0. Cloud Messaging tersedia pada klien dan Android 13+ meminta kebenaran notifikasi ketika aplikasi dibuka.
+
+**APK:** `releases/zbuddy-v1.11.0.apk`.
+**Pelayan:** backend Node.js 1.11.0, pakej `releases/zbuddy-nodejs-server-v1.11.0.zip`. Panduan VPS: [ALMALINUX.md](ALMALINUX.md). APK lama kekal serasi; UI web terkini dimuatkan daripada pelayan.
+
+APK menggunakan Android WebView untuk menjalankan antara muka JavaScript daripada pelayan Node.js yang dipilih. Ia menambah pemilihan pelayan, kebenaran kamera/mikrofon/GPS, pemilih gambar Android, butang Back dan pautan peta ke aplikasi luar. Node.js tidak dibenamkan dalam APK; satu pelayan berkongsi diperlukan untuk menghubungkan pengguna.
 
 ## Pasang dan sambung
 
-Versi 1.3.0 membawa 30 ikon Kelopak yang direka khas untuk Sembang, monogram S baharu, favicon dan ikon launcher Android yang sepadan. Ikon panggilan menggunakan gelombang suara; status dibaca menggunakan dua kelopak. Pasang APK 1.3.0 untuk ikon launcher dan menu native baharu. Ikon dalam chat datang daripada pelayan Node.js 1.3.0.
+Zbuddy membawa 30 ikon Kelopak yang direka khas, favicon dan ikon launcher Android yang sepadan. Ikon panggilan menggunakan gelombang suara; status dibaca menggunakan dua kelopak.
 
 1. Salin APK ke telefon Android 8.0+ dan buka untuk memasang. Android mungkin meminta kebenaran memasang daripada aplikasi yang membuka fail; pilih sendiri pada telefon.
 2. Jalankan pelayan Node.js. Lihat `SERVER.md` untuk ujian USB dan deployment VPS + HTTPS.
-3. Pada skrin pertama APK, masukkan alamat pelayan `https://domain-kamu` dan tekan **Sambung ke Sembang**.
-4. Cipta akaun, simpan kod pemulihan dan cari kenalan. Kenalan mesti menggunakan pelayan yang sama dan menyediakan kunci mereka sekali.
+3. APK production menggunakan `https://private.aigeo.my` secara lalai. Pada skrin pertama, semak alamat itu dan tekan **Sambung ke Zbuddy**.
+4. Cipta akaun, sahkan emel dan cari kenalan. Kenalan mesti menggunakan pelayan yang sama dan menyediakan kunci mereka sekali.
 
 Untuk ujian USB sahaja:
 
 ```sh
 npm start
 adb reverse tcp:3000 tcp:3000
-adb install -r releases/sembang-v1.3.0.apk
+adb install -r releases/zbuddy-v1.11.0.apk
 ```
 
 Pilih **Uji melalui USB** dalam APK. Jangan gunakan `10.0.2.2` atau IP LAN HTTP untuk menggantikan localhost kerana Web Crypto memerlukan secure context. Untuk penggunaan tanpa USB, hoskan Node.js pada domain HTTPS dengan sijil sah.
 
 ## Akaun dan kunci
 
-Kuki dan IndexedDB Android berada dalam sandbox aplikasi, berasingan daripada pelayar komputer. Akaun sedia ada memerlukan kod pemulihan pada penggunaan pertama Android. Origin (protokol/hostname/port) juga menentukan storan kunci; bertukar domain mungkin memerlukan kod semula. Menyahpasang APK atau mengosongkan datanya memadam kunci. Backup automatik aplikasi dinyahdayakan; simpan kod pemulihan sendiri.
+Kuki dan IndexedDB Android berada dalam sandbox aplikasi, berasingan daripada pelayar komputer. Pada penggunaan pertama Android atau selepas data aplikasi dipadam, log masuk dengan emel dan kata laluan untuk membuka sandaran kunci chat. Origin (protokol/hostname/port) menentukan storan kunci; bertukar domain memerlukan log masuk semula. Backup automatik aplikasi dinyahdayakan.
 
 Salin kod menggunakan clipboard Android dengan penandaan sensitif. Muat turun kod membuka pemilih lokasi simpan Android; fail teks hanya ditulis setelah pengguna memilih lokasi. Native message listener hanya menerima mesej daripada main frame origin pelayan yang dipilih. Tiada JavaScript interface terbuka kepada semua laman.
 
@@ -62,6 +66,6 @@ Ini pembungkus Android bagi aplikasi sedia ada, bukan penulisan semula React Nat
 
 Ujian automatik pelayan: `npm test`. Ujian Android: `npm run android:check`. Tandatangan APK diperiksa dengan `apksigner verify`. Pengesahan peranti fizikal dan panggilan suara/video dua peranti perlu dilakukan sebelum penggunaan sebenar.
 
-Rujukan: [Android WebView](https://developer.android.com/develop/ui/views/layout/webapps/webview), [WebViewCompat origin-scoped messaging](https://developer.android.com/reference/androidx/webkit/WebViewCompat), [WebChromeClient](https://developer.android.com/reference/android/webkit/WebChromeClient).
+Rujukan: [Android WebView](https://developer.android.com/develop/ui/views/layout/webapps/webview), [WebChromeClient](https://developer.android.com/reference/android/webkit/WebChromeClient).
 
-Pengesahan binaan ini: 3 ujian unit Android, Android lint dan 15 ujian Node/kriptografi lulus; tandatangan APK v2 disahkan dan pemasangan pada emulator Android berjaya. Semakan interaksi skrin Android, kamera/mikrofon/GPS serta panggilan dua telefon belum diselesaikan.
+Pengesahan binaan ini: ujian unit Android, Android lint dan release assembly lulus; 34 ujian Node/kriptografi turut lulus. Semakan interaksi skrin Android, kamera/mikrofon/GPS serta panggilan dua telefon masih perlu dibuat pada peranti sebenar.
